@@ -1,6 +1,6 @@
 from itertools import groupby
-from numpy import zeros,argsort
-import numpy as np
+from numpy import zeros,argsort,array,unique
+from collections import Counter
 
 def count_fasta(fasta_name):
     """
@@ -72,31 +72,47 @@ def group_aln(seq_aln, partition):
            partition, nseq x 1
     :return: count matrix, ngroup x nloci x 4
     """
+    
+    base_key = [1,2,4,8]
+    partition = array(partition)
 
+    # assert that the partition is from 0 to n-1
+    unipart = unique(partition)
+    assert unipart[0]==0, "group partition should be from 0 to %d, unipart[0]=%d" % (len(unipart)-1, unipart[0])
+    assert unipart[-1]==len(unipart)-1, "group partition should be from 0 to %d, unipart[-1]=%d" % (len(unipart)-1, unipart[-1])
+    
+    
     inds = argsort(partition)
     n_group = len(set(partition))
     nseq, nloci = seq_aln.shape
     cnt_aln = zeros((n_group, nloci, 4), dtype='uint8')
 
+    offset=0
     for k,g in groupby(partition[inds]):
-        tmpinds = [inds[i] for i,x in enumerate(g)]
-
-
-
-
-
-
-
-
+        tmplen = sum([1 for _ in g])
+        tmpinds = inds[offset:offset+tmplen]
+        
+        # count seq_aln into cnt_aln
+        for j in range(nloci):
+            tmpc = Counter(seq_aln[tmpinds,j])
+            for bi,bk in enumerate(base_key):
+                cnt_aln[k,j,bi] = tmpc[bk]
+        
+        offset += tmplen
+        
+    return cnt_aln    
 
 if __name__ == "__main__":
     # execute only if run as a script
     filename = 'sample.fa'
 
     heds,aln_mat = read_fasta(filename)
+    grp_aln = group_aln(aln_mat,[0,1,1,1])
+    
 
     print(heds)
     print(aln_mat)
+    print(grp_aln)
     #print(count_fasta(filename))
     #for hed, seq in fasta_iter(filename):
     #    print(hed,seq)
