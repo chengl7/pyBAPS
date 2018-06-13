@@ -81,10 +81,14 @@ for i=1:n-1
         end
         
         if k>=1 && k<ii
-            [prev(k,:), next(k,:), tmpHedInd] = delPointers1(prev(k,:), next(k,:), hedInd(k), ii);
-            [prev(k,:), next(k,:), tmpHedInd] = delPointers1(prev(k,:), next(k,:), tmpHedInd, jj);
+%             [prev(k,:), next(k,:), tmpHedInd] = delPointers(prev(k,:), next(k,:), hedInd(k), ii);
+%             [prev(k,:), next(k,:), tmpHedInd] = delPointers(prev(k,:), next(k,:), tmpHedInd, jj);
+%             [prev(k,:), next(k,:), tmpHedInd, tmpHedVal] = insertPointers(dist(k,:), prev(k,:), next(k,:), tmpHedInd, ii);
             
-            [prev(k,:), next(k,:), tmpHedInd, tmpHedVal] = insertPointers1(dist(k,:), prev(k,:), next(k,:), tmpHedInd, ii);
+            [prev(k,k+1:end), next(k,k+1:end), tmpHedInd] = delPointers1(prev(k,k+1:end), next(k,k+1:end), k, hedInd(k), ii);
+            [prev(k,k+1:end), next(k,k+1:end), tmpHedInd] = delPointers1(prev(k,k+1:end), next(k,k+1:end), k, tmpHedInd, jj);
+            [prev(k,k+1:end), next(k,k+1:end), tmpHedInd, tmpHedVal] = insertPointers1(dist(k,k+1:end), prev(k,k+1:end), next(k,k+1:end), k, tmpHedInd, ii);
+            
             hedInd(k) = tmpHedInd;
             hedVal(k) = tmpHedVal;
             
@@ -98,7 +102,8 @@ for i=1:n-1
             next(ii,tmpinds) = nextVec;
             
         elseif k>ii && k<jj
-            [prev(k,:), next(k,:), tmpHedInd] = delPointers1(prev(k,:), next(k,:), hedInd(k), jj);
+%             [prev(k,:), next(k,:), tmpHedInd] = delPointers(prev(k,:), next(k,:), hedInd(k), jj);
+            [prev(k,k+1:end), next(k,k+1:end), tmpHedInd] = delPointers1(prev(k,k+1:end), next(k,k+1:end), k, hedInd(k), jj);
             if tmpHedInd~=hedInd(k)
                 if tmpHedInd==DEL_VAL
                     hedInd(k) = DEL_VAL;
@@ -120,6 +125,8 @@ for i=1:n-1
         hedInd(jj)=DEL_VAL;
         hedVal(jj)=DEL_VAL;
     end
+    
+%     plotMatrix(dist, prev, next)
     
 end
 
@@ -146,7 +153,7 @@ y = distMat(i,:);
 y(1:i-1) = distMat(1:i-1,i)';
 
 
-function [prevVec, nextVec, hedInd] = delPointers1(prevVec, nextVec, hedInd, i)
+function [prevVec, nextVec, hedInd] = delPointers(prevVec, nextVec, hedInd, i)
 % delete the ith element from the double linked array
 global HED_VAL
 global END_VAL
@@ -180,8 +187,41 @@ else
     nextVec(prevind) = nextind;
 end
 
+function [prevVec, nextVec, hedInd] = delPointers1(prevVec, nextVec, offset, hedInd, i)
+% delete the ith element from the double linked array
+global HED_VAL
+global END_VAL
+global DEL_VAL
 
-function [prevVec, nextVec, hedInd, hedVal] = insertPointers1(distVec, prevVec, nextVec, hedInd, i)
+prevind = prevVec(i-offset);
+nextind = nextVec(i-offset);
+
+% not necessary, since deleted values only occur on rows with nodeFlag(k)==false
+% elements that has been deleted    
+% if prevind==DEL_VAL && nextind==DEL_VAL
+%     return;
+% end
+
+% elements is the single left element
+if prevind==HED_VAL && nextind==END_VAL
+    hedInd=DEL_VAL;
+    prevVec(i-offset)=DEL_VAL;
+    nextVec(i-offset)=DEL_VAL;
+    return;        
+end
+
+% remove the element from the list
+if prevind==HED_VAL
+    hedInd = nextind;
+    prevVec(nextind-offset) = prevind;
+elseif nextind==END_VAL
+    nextVec(prevind-offset) = nextind;
+else
+    prevVec(nextind-offset) = prevind;
+    nextVec(prevind-offset) = nextind;
+end
+
+function [prevVec, nextVec, hedInd, hedVal] = insertPointers(distVec, prevVec, nextVec, hedInd, i)
 % insert the updated value of distVec(i) into the double linked list
 global HED_VAL
 global END_VAL
@@ -234,6 +274,58 @@ end
 % retrieve the distance of the hed element
 hedVal = distVec(hedInd);
 
+function [prevVec, nextVec, hedInd, hedVal] = insertPointers1(distVec, prevVec, nextVec, offset, hedInd, i)
+% insert the updated value of distVec(i) into the double linked list
+global HED_VAL
+global END_VAL
+global DEL_VAL
+
+targetVal = distVec(i-offset);
+curNodeInd = hedInd;
+
+% in case of all elements deleted, insert one new 
+if curNodeInd==DEL_VAL
+    hedInd=i;
+    hedVal=targetVal;
+    prevVec(i-offset) = HED_VAL;
+    nextVec(i-offset) = END_VAL;
+    return;
+end
+
+ % insert in the head
+if distVec(curNodeInd-offset)>=targetVal
+    hedInd=i;
+    hedVal=targetVal;
+    prevVec(i-offset) = HED_VAL;
+    nextVec(i-offset) = curNodeInd;     
+    prevVec(curNodeInd-offset) = i;
+    return;
+end
+
+% insert in the middle or end
+prevNodeInd=prevVec(curNodeInd-offset);
+assert(prevNodeInd==HED_VAL);
+while curNodeInd~=END_VAL && distVec(curNodeInd-offset)<targetVal
+    prevNodeInd = curNodeInd;
+    curNodeInd = nextVec(curNodeInd-offset);
+end
+
+if curNodeInd==END_VAL
+    % add to the end
+    nextVec(prevNodeInd-offset) = i;
+    nextVec(i-offset) = END_VAL;
+    prevVec(i-offset) = prevNodeInd;
+else
+    % add to the middle
+    nextVec(prevNodeInd-offset) = i;
+    prevVec(curNodeInd-offset) = i;
+
+    nextVec(i-offset) = curNodeInd;
+    prevVec(i-offset) = prevNodeInd;
+end
+
+% retrieve the distance of the hed element
+hedVal = distVec(hedInd-offset);
 
 function [prevVec, nextVec, hedInd, hedVal] = genPointers(arr, flagArr, offset)
 
