@@ -22,6 +22,10 @@ global BLOCK_SIZE
 global N_BLOCK
 global N_NODE
 
+global BEDIT_PREV
+global BEDIT_NEXT
+global BEDIT_DIST
+
 HED_VAL=-1;
 END_VAL=-2;
 DEL_VAL=-3;
@@ -31,6 +35,10 @@ N_NODE = n;
 
 N_BLOCK = ceil(sqrt(n));
 BLOCK_SIZE = ceil(n/N_BLOCK);
+
+BEDIT_PREV = editPool(N_BLOCK, BLOCK_SIZE, DEL_VAL);
+BEDIT_NEXT = editPool(N_BLOCK, BLOCK_SIZE, DEL_VAL);
+BEDIT_DIST = editPool(N_BLOCK, BLOCK_SIZE, DEL_VAL);
 
 nodeFlag = true(1,n);
 blockFlag = true(1,N_BLOCK);
@@ -46,7 +54,6 @@ hedVal = zeros(n-1,1);
 bprev = cell(N_BLOCK,N_BLOCK);
 bnext = cell(N_BLOCK,N_BLOCK);
 bdist = cell(N_BLOCK,N_BLOCK);
-% bedit = cell(N_BLOCK,N_BLOCK);
 for bi=1:N_BLOCK
     for bj=bi:N_BLOCK
         bdist{bi,bj} = calDist(X, bi, bj);
@@ -116,28 +123,36 @@ for i=1:n-1
     for bk = 1:bii-1
         % retrieve data blocks
         [resDist, resPrev, resNext, offset] = retrieveBlocks(bdist, bprev, bnext, blockFlag, bk);
+        BEDIT_PREV = clear(BEDIT_PREV,bk);
+        BEDIT_NEXT = clear(BEDIT_NEXT,bk);
         
         for kk=1:BLOCK_SIZE
             mk = getmi(bk,kk);
             if ~nodeFlag(mk)
                 continue;
             else
-                [resPrev(kk,:), resNext(kk,:), hedInd(mk), hedVal(mk)] = del2ins1(resDist(kk,:), resPrev(kk,:), resNext(kk,:), offset, hedInd(mk), ii, jj);
+                [resPrev(kk,:), resNext(kk,:), hedInd(mk), hedVal(mk)] = del2ins1(resDist(kk,:), resPrev(kk,:), resNext(kk,:), offset, hedInd(mk), kk, ii, jj);
             end
         end
         
-        bprev(bk,bk:end) = distMatBlock(resPrev);
-        bnext(bk,bk:end) = distMatBlock(resNext);
+      
+        
+        bprev = updateBlocks(bprev, BEDIT_PREV, bk);
+        bnext = updateBlocks(bnext, BEDIT_NEXT, bk);
+%         bprev(bk,bk:end) = distMatBlock(resPrev);
+%         bnext(bk,bk:end) = distMatBlock(resNext);
     end
     
     for bk = bii
+        BEDIT_PREV = clear(BEDIT_PREV,bk);
+        BEDIT_NEXT = clear(BEDIT_NEXT,bk);
         [resDist, resPrev, resNext, offset] = retrieveBlocks(bdist, bprev, bnext, blockFlag, bk);
         for kk=1:iii-1
             mk = getmi(bk,kk);
             if ~nodeFlag(mk)
                 continue;
             else
-                [resPrev(kk,:), resNext(kk,:), hedInd(mk), hedVal(mk)] = del2ins1(resDist(kk,:), resPrev(kk,:), resNext(kk,:), offset, hedInd(mk), ii, jj);
+                [resPrev(kk,:), resNext(kk,:), hedInd(mk), hedVal(mk)] = del2ins1(resDist(kk,:), resPrev(kk,:), resNext(kk,:), offset, hedInd(mk), kk, ii, jj);
             end
         end
         
@@ -146,6 +161,10 @@ for i=1:n-1
         tmpInds = iii+find(tmpNodeFlag(ii+1:N_NODE));
         % note that distvec, prevvec, nextvec are 1*(n-ii) vector
         [resPrev(iii,tmpInds), resNext(iii,tmpInds), hedInd(ii), hedVal(ii)] = genPointers(resDist(iii,iii+1:end),tmpNodeFlag(ii+1:N_NODE),ii);
+        for tmpk=tmpInds
+            BEDIT_PREV = insertRowEdit(BEDIT_PREV, iii, tmpk+offset, resPrev(iii,tmpk));
+            BEDIT_NEXT = insertRowEdit(BEDIT_NEXT, iii, tmpk+offset, resNext(iii,tmpk));
+        end
         
         if bii==bjj
             endRow=jjj-1;
@@ -158,16 +177,18 @@ for i=1:n-1
             if ~nodeFlag(mk)
                 continue;
             else
-                [resPrev(kk,:), resNext(kk,:), hedInd(mk), hedVal(mk)] = delPointers(resDist(kk,:), resPrev(kk,:), resNext(kk,:), offset, hedInd(mk), jj);
+                [resPrev(kk,:), resNext(kk,:), hedInd(mk), hedVal(mk)] = delPointers(resDist(kk,:), resPrev(kk,:), resNext(kk,:), offset, hedInd(mk), kk, jj);
             end
         end
-        
-        bprev(bk,bk:end) = distMatBlock(resPrev);
-        bnext(bk,bk:end) = distMatBlock(resNext);
+
+        bprev = updateBlocksRowInsertion(bprev, BEDIT_PREV, bk);
+        bnext = updateBlocksRowInsertion(bnext, BEDIT_NEXT, bk);
     end
     
     for bk=bii+1:bjj
         [resDist, resPrev, resNext, offset] = retrieveBlocks(bdist, bprev, bnext, blockFlag, bk);
+        BEDIT_PREV = clear(BEDIT_PREV,bk);
+        BEDIT_NEXT = clear(BEDIT_NEXT,bk);
         
         if bk==bjj
             endRow=jjj-1;
@@ -180,12 +201,15 @@ for i=1:n-1
             if ~nodeFlag(mk)
                 continue;
             else
-                [resPrev(kk,:), resNext(kk,:), hedInd(mk), hedVal(mk)] = delPointers(resDist(kk,:), resPrev(kk,:), resNext(kk,:), offset, hedInd(mk), jj);
+                [resPrev(kk,:), resNext(kk,:), hedInd(mk), hedVal(mk)] = delPointers(resDist(kk,:), resPrev(kk,:), resNext(kk,:), offset, hedInd(mk), kk, jj);
             end
         end
         
-        bprev(bk,bk:end) = distMatBlock(resPrev);
-        bnext(bk,bk:end) = distMatBlock(resNext);
+%         bprev(bk,bk:end) = distMatBlock(resPrev);
+%         bnext(bk,bk:end) = distMatBlock(resNext);
+        
+        bprev = updateBlocks(bprev, BEDIT_PREV, bk);
+        bnext = updateBlocks(bnext, BEDIT_NEXT, bk);
         
     end
     
@@ -203,10 +227,54 @@ for i=1:n-1
 %     [hedInd hedVal]
 end
 
-function [prevvec, nextvec, tmpHedInd, tmpHedVal] = del2ins1(distvec, prevvec, nextvec, offset, hedInd, ii, jj)
-[prevvec, nextvec, tmpHedInd] = delPointers(distvec, prevvec, nextvec, offset, hedInd, ii);
-[prevvec, nextvec, tmpHedInd] = delPointers(distvec, prevvec, nextvec, offset, tmpHedInd, jj);
-[prevvec, nextvec, tmpHedInd, tmpHedVal] = insertPointers(distvec, prevvec, nextvec, offset, tmpHedInd, ii);
+
+function bmat = updateBlocks(bmat, editpool, bi)
+% bi: update from block bi
+global N_BLOCK
+
+for bk=bi:N_BLOCK
+    if editpool.editFlag(bk)
+        editpool = sortEdit(editpool,bk);
+        for ri=1:editpool.BLOCK_SIZE
+            for jj=1:editpool.normEdit{bk}.pointer(ri)
+                tmpind = editpool.normEdit{bk}.index(ri,jj);
+                tmpval = editpool.normEdit{bk}.value(ri,jj);
+                bmat{bi,bk}(ri,tmpind) = tmpval;
+            end
+        end
+    end
+end
+
+function bmat = updateBlocksRowInsertion(bmat, editpool, bi)
+global N_BLOCK
+for bk=bi:N_BLOCK
+    if editpool.editFlag(bk)
+        editpool = sortEdit(editpool,bk);
+        insertrowind = editpool.insertRow;
+        
+        for ri=1:editpool.BLOCK_SIZE % row index of the block
+            if ri==insertrowind
+                for jj=1:editpool.rowEdit{bk}.pointer(1)
+                    tmpind = editpool.rowEdit{bk}.index(1,jj);
+                    tmpval = editpool.rowEdit{bk}.value(1,jj);
+                    bmat{bi,bk}(insertrowind,tmpind) = tmpval;
+                end
+            else
+                for jj=1:editpool.normEdit{bk}.pointer(ri)
+                    tmpind = editpool.normEdit{bk}.index(ri,jj);
+                    tmpval = editpool.normEdit{bk}.value(ri,jj);
+                    bmat{bi,bk}(ri,tmpind) = tmpval;
+                end
+            end
+            
+        end
+    end
+end
+
+function [prevvec, nextvec, tmpHedInd, tmpHedVal] = del2ins1(distvec, prevvec, nextvec, offset, hedInd, blockRowInd, ii, jj)
+[prevvec, nextvec, tmpHedInd] = delPointers(distvec, prevvec, nextvec, offset, hedInd, blockRowInd, ii);
+[prevvec, nextvec, tmpHedInd] = delPointers(distvec, prevvec, nextvec, offset, tmpHedInd, blockRowInd, jj);
+[prevvec, nextvec, tmpHedInd, tmpHedVal] = insertPointers(distvec, prevvec, nextvec, offset, tmpHedInd, blockRowInd, ii);
 
 function y = calDist(X, bi, bj)
 global BLOCK_SIZE
@@ -286,11 +354,14 @@ for i=1:length(rowInds)
     bmat{bi,bj}(ii,jj) = vals(i);
 end
 
-function [prevVec, nextVec, hedInd, hedVal] = delPointers(distVec, prevVec, nextVec, offset, hedInd, i)
+function [prevVec, nextVec, hedInd, hedVal] = delPointers(distVec, prevVec, nextVec, offset, hedInd, rowInd, i)
 % delete the ith element from the double linked array
 global HED_VAL
 global END_VAL
 global DEL_VAL
+
+global BEDIT_PREV
+global BEDIT_NEXT
 
 prevind = prevVec(i-offset);
 nextind = nextVec(i-offset);
@@ -309,6 +380,9 @@ if prevind==HED_VAL && nextind==END_VAL
     hedVal=DEL_VAL;
     prevVec(i-offset)=DEL_VAL;
     nextVec(i-offset)=DEL_VAL;
+    
+    BEDIT_PREV = insertEditRep(BEDIT_PREV, rowInd, i, DEL_VAL);
+    BEDIT_NEXT = insertEditRep(BEDIT_NEXT, rowInd, i, DEL_VAL);
     return;        
 end
 
@@ -317,18 +391,29 @@ if prevind==HED_VAL
     hedInd = nextind;
     hedVal = distVec(hedInd-offset);
     prevVec(nextind-offset) = prevind;
+    
+    BEDIT_PREV = insertEditRep(BEDIT_PREV, rowInd, nextind, prevind);
+    
 elseif nextind==END_VAL
     nextVec(prevind-offset) = nextind;
+    
+    BEDIT_NEXT = insertEditRep(BEDIT_NEXT, rowInd, prevind, nextind);
 else
     prevVec(nextind-offset) = prevind;
     nextVec(prevind-offset) = nextind;
+    
+    BEDIT_PREV = insertEditRep(BEDIT_PREV, rowInd, nextind, prevind);
+    BEDIT_NEXT = insertEditRep(BEDIT_NEXT, rowInd, prevind, nextind);
 end
 
-function [prevVec, nextVec, hedInd, hedVal] = insertPointers(distVec, prevVec, nextVec, offset, hedInd, i)
+function [prevVec, nextVec, hedInd, hedVal] = insertPointers(distVec, prevVec, nextVec, offset, hedInd, rowInd, i)
 % insert the updated value of distVec(i) into the double linked list
 global HED_VAL
 global END_VAL
 global DEL_VAL
+
+global BEDIT_PREV
+global BEDIT_NEXT
 
 targetVal = distVec(i-offset);
 curNodeInd = hedInd;
@@ -339,6 +424,9 @@ if curNodeInd==DEL_VAL
     hedVal=targetVal;
     prevVec(i-offset) = HED_VAL;
     nextVec(i-offset) = END_VAL;
+    
+    BEDIT_PREV = insertEditRep(BEDIT_PREV, rowInd, i, HED_VAL);
+    BEDIT_NEXT = insertEditRep(BEDIT_NEXT, rowInd, i, END_VAL);
     return;
 end
 
@@ -349,12 +437,21 @@ if distVec(curNodeInd-offset)>=targetVal
     prevVec(i-offset) = HED_VAL;
     nextVec(i-offset) = curNodeInd;     
     prevVec(curNodeInd-offset) = i;
+    
+    BEDIT_PREV = insertEditRep(BEDIT_PREV, rowInd, i, HED_VAL);
+    BEDIT_NEXT = insertEditRep(BEDIT_NEXT, rowInd, i, curNodeInd);
+    BEDIT_PREV = insertEditRep(BEDIT_PREV, rowInd, curNodeInd, i);
+    
     return;
 end
 
 % insert in the middle or end
 prevNodeInd=prevVec(curNodeInd-offset);
-assert(prevNodeInd==HED_VAL);
+try
+    assert(prevNodeInd==HED_VAL);
+catch
+    keyboard
+end
 while curNodeInd~=END_VAL && distVec(curNodeInd-offset)<targetVal
     prevNodeInd = curNodeInd;
     curNodeInd = nextVec(curNodeInd-offset);
@@ -365,6 +462,11 @@ if curNodeInd==END_VAL
     nextVec(prevNodeInd-offset) = i;
     nextVec(i-offset) = END_VAL;
     prevVec(i-offset) = prevNodeInd;
+    
+    BEDIT_NEXT = insertEditRep(BEDIT_NEXT, rowInd, prevNodeInd, i);
+    BEDIT_NEXT = insertEditRep(BEDIT_NEXT, rowInd, i, END_VAL);
+    BEDIT_PREV = insertEditRep(BEDIT_PREV, rowInd, i, prevNodeInd);
+    
 else
     % add to the middle
     nextVec(prevNodeInd-offset) = i;
@@ -372,6 +474,12 @@ else
 
     nextVec(i-offset) = curNodeInd;
     prevVec(i-offset) = prevNodeInd;
+    
+    BEDIT_NEXT = insertEditRep(BEDIT_NEXT, rowInd, prevNodeInd, i);
+    BEDIT_PREV = insertEditRep(BEDIT_PREV, rowInd, curNodeInd, i);
+    
+    BEDIT_NEXT = insertEditRep(BEDIT_NEXT, rowInd, i, curNodeInd);
+    BEDIT_PREV = insertEditRep(BEDIT_PREV, rowInd, i, prevNodeInd);
 end
 
 % retrieve the distance of the hed element
@@ -479,20 +587,9 @@ end
 function resArr = distMatBlock(resMat)
 % distribute the combined matrix of bi row into blocks 
 global BLOCK_SIZE
-% global DEL_VAL
 
 len = size(resMat,2);
-
 nb = len/BLOCK_SIZE;
-
-% if mod(len,BLOCK_SIZE)==0
-%     nb = len/BLOCK_SIZE;
-% else
-%     nb = ceil(len/BLOCK_SIZE);
-%     newMat = zeros(BLOCK_SIZE,nb*BLOCK_SIZE)+DEL_VAL;
-%     newMat(:,1:len) = resMat;
-%     resMat = newMat;
-% end
 
 resArr = cell(1,nb);
 
@@ -508,10 +605,4 @@ function [resDist, resPrev, resNext, offsetD] = retrieveBlocks(bdist, bprev, bne
 [resDist, offsetD] = getMatBlock(bdist,blockFlag,bk);
 [resPrev, offsetP] = getMatBlock(bprev,blockFlag,bk);
 [resNext, offsetN] = getMatBlock(bnext,blockFlag,bk);
-% assert(offsetP==offsetN);
-% assert(offsetP==offsetD);
-
-% resDist = resDist(:,1:N_NODE-offsetD);
-% resPrev = resPrev(:,1:N_NODE-offsetD);
-% resNext = resNext(:,1:N_NODE-offsetD);
 
