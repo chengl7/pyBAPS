@@ -73,9 +73,10 @@ for bi=1:N_BLOCK
             continue
         end
         
-        tmprowflag = nodeFlag(tmprowind+1:n);
-        assert(length(tmpinds)==length(tmprowflag));
-        [tmpPrev(j,tmpinds(tmprowflag)), tmpNext(j,tmpinds(tmprowflag)), hedInd(tmprowind), hedVal(tmprowind)] = genPointers(resMat(j,tmpinds), tmprowflag, offset+j);
+%         tmprowflag = nodeFlag(tmprowind+1:n);
+%         assert(length(tmpinds)==length(tmprowflag));
+%         [tmpPrev(j,tmpinds(tmprowflag)), tmpNext(j,tmpinds(tmprowflag)), hedInd(tmprowind), hedVal(tmprowind)] = genPointers(resMat(j,tmpinds), tmprowflag, offset+j);
+        [tmpPrev(j,tmpinds), tmpNext(j,tmpinds), hedInd(tmprowind), hedVal(tmprowind)] = genPointers(resMat(j,tmpinds), true(1,n-tmprowind), offset+j);
     end
     
     for j=bi:N_BLOCK
@@ -88,7 +89,7 @@ end
 % complete linkage core algorithm
 treeNodeArr = 1:n;
 Z = zeros(n-1,3);
-for i=1:n-1
+for iStep=1:n-1
     
     % find the pair to be merged
     [minval, minind] = mymin(hedVal);
@@ -96,9 +97,9 @@ for i=1:n-1
     jj = hedInd(ii);
     
 %     [hedInd hedVal]
-    fprintf('%dth step, merger index:node %d:%d and %d:%d.\n',i,ii,treeNodeArr(ii),jj,treeNodeArr(jj));
+    fprintf('%dth step, merger index:node %d:%d and %d:%d.\n',iStep,ii,treeNodeArr(ii),jj,treeNodeArr(jj));
     
-    Z(i,:) = [sort([treeNodeArr(ii) treeNodeArr(jj)]) minval];
+    Z(iStep,:) = [sort([treeNodeArr(ii) treeNodeArr(jj)]) minval];
     
     nodeFlag([ii jj])=false;
     newdist = calPairDist1(bdist,nodeFlag,ii,jj);
@@ -112,7 +113,7 @@ for i=1:n-1
     bdist = updateMatRow(bdist, ii, tmpInds, newdist(tmpInds));
         
     % update tree node array
-    treeNodeArr(ii) = i+n;
+    treeNodeArr(ii) = iStep+n;
     treeNodeArr(jj) = 0;
     
     nodeFlag([ii jj])=true;
@@ -134,13 +135,9 @@ for i=1:n-1
                 [resPrev(kk,:), resNext(kk,:), hedInd(mk), hedVal(mk)] = del2ins1(resDist(kk,:), resPrev(kk,:), resNext(kk,:), offset, hedInd(mk), kk, ii, jj);
             end
         end
-        
-      
-        
+
         bprev = updateBlocks(bprev, BEDIT_PREV, bk);
         bnext = updateBlocks(bnext, BEDIT_NEXT, bk);
-%         bprev(bk,bk:end) = distMatBlock(resPrev);
-%         bnext(bk,bk:end) = distMatBlock(resNext);
     end
     
     for bk = bii
