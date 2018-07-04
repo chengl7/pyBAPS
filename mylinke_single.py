@@ -92,14 +92,14 @@ def gen_pointers(arr, flagArr, offset):
     #nidx = [-offset-1, flagInds[idx], -offset-1]
     
     prevVec = np.zeros(idx.shape[0],'uint32')+constants.DEL_VAL
-    prevVec[idx] = offset + 1 + nidx[0:-2]
+    prevVec[idx] = offset + nidx[0:-2]
     prevVec[idx[0]] = constants.HED_VAL
     
     nextVec = np.zeros(idx.shape[0],'uint32')+constants.DEL_VAL
-    nextVec[idx] = offset + 1 +  nidx[2:]
+    nextVec[idx] = offset +  nidx[2:]
     nextVec[idx[-1]] = constants.END_VAL
     
-    hedInd = flagInds[idx[0]] + 1 +  offset
+    hedInd = flagInds[idx[0]] + offset
     hedVal = arr[flagInds[idx[0]]]
     return (prevVec, nextVec, hedInd, hedVal)
 
@@ -123,7 +123,7 @@ def extract_row(disMat,i):
     return y    
 
 def del_pointers(mdist,mprev,mnext,hedInd,hedVal,nodeFlag,i):
-    for ii in range(i+1):
+    for ii in range(i):
         if not nodeFlag[ii]:
             continue
         prevind = mprev[ii,i]
@@ -198,14 +198,14 @@ def insert_pointers(mdist,mprev,mnext,hedInd,hedVal,nodeFlag,i):
    
     tmpinds = i + 1 + np.where(nodeFlag[i+1:])[0]
 #    mprev[i,tmpinds],mnext[i,tmpinds],hedInd[i],hedVal[i] = gen_pointers(mdist[i,tmpinds],nodeFlag[tmpinds],i)
-    mprev[i,tmpinds],mnext[i,tmpinds],tmpHedInd,tmpHedVal = gen_pointers(mdist[i,tmpinds],nodeFlag[tmpinds],-1)
-    hedInd[i] = tmpinds[tmpHedInd]
+    mprev[i,tmpinds],mnext[i,tmpinds],tmpHedInd,tmpHedVal = gen_pointers(mdist[i,tmpinds],nodeFlag[tmpinds],i+1)
+    hedInd[i] = tmpinds[tmpHedInd-i-1]
     hedVal[i] = tmpHedVal    
         
 
 #n=np.random.randint(50,200)
-n = 5
-d = 50
+#n = 10
+#d = 50
 #d=np.random.randint(50,2000)
 #X=np.random.randint(0,2,(n,d),dtype='uint8')
 X = np.load('XX.npy')
@@ -228,7 +228,7 @@ mnext = np.zeros((n,n),dtype='uint32')
 
 for i in range(n-1):
     tmpinds = i + 1 + np.where(nodeFlag[i+1:])[0]
-    mprev[i,tmpinds],mnext[i,tmpinds],hedInd[i],hedVal[i] = gen_pointers(mdist[i,tmpinds],nodeFlag[tmpinds],i)
+    mprev[i,tmpinds],mnext[i,tmpinds],hedInd[i],hedVal[i] = gen_pointers(mdist[i,tmpinds],nodeFlag[tmpinds],i+1)
 
 treeNodeArr=np.arange(constants.N_NODE,dtype='uint32')
 Z = np.zeros((constants.N_NODE-1,3),dtype='float')
@@ -239,10 +239,17 @@ for i in range(constants.N_NODE-1):
     ii = minind
     jj = hedInd[ii]
     
-    print(hedVal)
-    print(hedInd)
-    print(nodeFlag)
-    print(mdist)
+    if ii==32 and jj==26:
+        print(hedVal)
+        print(hedInd)
+        print(nodeFlag)
+    
+#    print(hedVal)
+#    print(hedInd)
+#    print(nodeFlag)
+#    print(mdist)
+#    print(mprev)
+#    print(mnext)
     
     print('%dth step, merge index-node %d-%d and %d-%d.\n' % (i,ii,treeNodeArr[ii],jj,treeNodeArr[jj]))
     
@@ -260,6 +267,13 @@ for i in range(constants.N_NODE-1):
     
     del_pointers(mdist,mprev,mnext,hedInd,hedVal,nodeFlag,ii)
     del_pointers(mdist,mprev,mnext,hedInd,hedVal,nodeFlag,jj)
+    
+#    print(hedVal)
+#    print(hedInd)
+#    print(nodeFlag)
+#    print(mdist)
+#    print(mprev)
+#    print(mnext)
     
     if jj<constants.N_NODE-1:
         hedInd[jj]=constants.DEL_VAL
