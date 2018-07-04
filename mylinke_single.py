@@ -197,19 +197,43 @@ def insert_pointers(mdist,mprev,mnext,hedInd,hedVal,nodeFlag,i):
        return
    
     tmpinds = i + 1 + np.where(nodeFlag[i+1:])[0]
+    mprev[i,tmpinds],mnext[i,tmpinds],hedInd[i],hedVal[i] = gen_pointers1(mdist[i,tmpinds],tmpinds)
 #    mprev[i,tmpinds],mnext[i,tmpinds],hedInd[i],hedVal[i] = gen_pointers(mdist[i,tmpinds],nodeFlag[tmpinds],i)
-    mprev[i,tmpinds],mnext[i,tmpinds],tmpHedInd,tmpHedVal = gen_pointers(mdist[i,tmpinds],nodeFlag[tmpinds],i+1)
-    hedInd[i] = tmpinds[tmpHedInd-i-1]
-    hedVal[i] = tmpHedVal    
-        
+#    tmpprev,tmpnext,tmpHedInd,tmpHedVal = gen_pointers(mdist[i,tmpinds],nodeFlag[tmpinds],0)
+#    mprev[i,tmpinds] = tmpinds[tmpprev]
+#    mnext[i,tmpinds] = tmpinds[tmpnext]
+#    hedInd[i] = tmpinds[tmpHedInd]
+#    hedVal[i] = tmpHedVal    
 
-#n=np.random.randint(50,200)
-#n = 10
+def gen_pointers1(arr, valinds):
+    if valinds.size==0:
+        hedInd = constants.DEL_VAL
+        hedVal = constants.DEL_VAL
+        prevVec = None
+        nextVec = None
+        return (prevVec, nextVec, hedInd, hedVal)
+    
+    idx = np.argsort(arr)
+    
+    prevVec = np.zeros(idx.shape[0],'uint32')+constants.DEL_VAL
+    prevVec[idx[1:]] = valinds[idx[0:-1]]
+    prevVec[idx[0]] = constants.HED_VAL
+    
+    nextVec = np.zeros(idx.shape[0],'uint32')+constants.DEL_VAL
+    nextVec[idx[:-1]] = valinds[idx[1:]]
+    nextVec[idx[-1]] = constants.END_VAL
+    
+    hedInd = valinds[idx[0]]
+    hedVal = arr[idx[0]]
+    return (prevVec, nextVec, hedInd, hedVal)        
+
+n=np.random.randint(50,200)
+#n = 6
 #d = 50
-#d=np.random.randint(50,2000)
-#X=np.random.randint(0,2,(n,d),dtype='uint8')
-X = np.load('XX.npy')
-n,d = X.shape
+d=np.random.randint(20,100)
+X=np.random.randint(0,2,(n,d),dtype='uint8')
+#X = np.load('XX.npy')
+#n,d = X.shape
 
 constants.init(n,d)
 
@@ -239,10 +263,7 @@ for i in range(constants.N_NODE-1):
     ii = minind
     jj = hedInd[ii]
     
-    if ii==32 and jj==26:
-        print(hedVal)
-        print(hedInd)
-        print(nodeFlag)
+    assert(jj>ii)
     
 #    print(hedVal)
 #    print(hedInd)
@@ -256,17 +277,20 @@ for i in range(constants.N_NODE-1):
     Z[i,0:2] = np.sort(treeNodeArr[[ii,jj]])
     Z[i,2] = minval
     
+    treeNodeArr[ii] = i+constants.N_NODE
+    treeNodeArr[jj] = 0
+    
+    del_pointers(mdist,mprev,mnext,hedInd,hedVal,nodeFlag,jj)
+    del_pointers(mdist,mprev,mnext,hedInd,hedVal,nodeFlag,ii)
+    
+    
     nodeFlag[ii]=False
     nodeFlag[jj]=False
     
     cal_pair_dist(mdist,nodeFlag,ii,jj)
     
     
-    treeNodeArr[ii] = i+constants.N_NODE
-    treeNodeArr[jj] = 0
     
-    del_pointers(mdist,mprev,mnext,hedInd,hedVal,nodeFlag,ii)
-    del_pointers(mdist,mprev,mnext,hedInd,hedVal,nodeFlag,jj)
     
 #    print(hedVal)
 #    print(hedInd)
