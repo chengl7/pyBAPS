@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Thu Jun 28 20:30:39 2018
 
-@author: lcheng
-"""
 from math import sqrt,ceil
 import numpy as np
 
@@ -21,16 +16,26 @@ class constants:
     N_NODE = 0
         
     @classmethod
-    def init(cls,n, xlen):
+    def init(cls, n, xlen):
         cls.N_NODE = n
         cls.N_BLOCK = ceil(sqrt(n))
         cls.BLOCK_SIZE = ceil(n/cls.N_BLOCK)
         
-        nb=16
+        nb = cls.get_data_type(max(n,xlen))
+        cls.DATA_TYPE = 'uint'+str(nb)
+        
+        #nb=16
         cls.DEL_VAL = (1<<nb)-1
         cls.HED_VAL = (1<<nb)-2
         cls.END_VAL = (1<<nb)-3
-    
+        
+    @classmethod
+    def get_data_type(cls,n):
+        for i in (16,32,64):
+            if n<((1<<i)-3):
+                return i
+        raise Exception('input {} is too large (larger than uint64).\n'.format(n))    
+            
     @classmethod    
     def getbi(cls,i):
         bi = i//cls.BLOCK_SIZE
@@ -91,11 +96,11 @@ def gen_pointers(arr, flagArr, offset):
     nidx = np.hstack((-1,flagInds[idx],-1))
     #nidx = [-offset-1, flagInds[idx], -offset-1]
     
-    prevVec = np.zeros(idx.shape[0],'uint32')+constants.DEL_VAL
+    prevVec = np.zeros(idx.shape[0],constants.DATA_TYPE)+constants.DEL_VAL
     prevVec[idx] = offset + nidx[0:-2]
     prevVec[idx[0]] = constants.HED_VAL
     
-    nextVec = np.zeros(idx.shape[0],'uint32')+constants.DEL_VAL
+    nextVec = np.zeros(idx.shape[0],constants.DATA_TYPE)+constants.DEL_VAL
     nextVec[idx] = offset +  nidx[2:]
     nextVec[idx[-1]] = constants.END_VAL
     
@@ -108,7 +113,7 @@ def cal_pair_dist(distMat, nodeFlag, i, j):
     veci = extract_row(distMat,i)
     vecj = extract_row(distMat,j)
     
-    y = np.zeros(veci.shape,'uint32')+constants.DEL_VAL
+    y = np.zeros(veci.shape,constants.DATA_TYPE)+constants.DEL_VAL
     y[nodeFlag] = np.maximum(veci[nodeFlag],vecj[nodeFlag])
     distMat[:i,i] = y[:i]
     distMat[i,i+1:] = y[i+1:]
@@ -198,12 +203,6 @@ def insert_pointers(mdist,mprev,mnext,hedInd,hedVal,nodeFlag,i):
    
     tmpinds = i + 1 + np.where(nodeFlag[i+1:])[0]
     mprev[i,tmpinds],mnext[i,tmpinds],hedInd[i],hedVal[i] = gen_pointers1(mdist[i,tmpinds],tmpinds)
-#    mprev[i,tmpinds],mnext[i,tmpinds],hedInd[i],hedVal[i] = gen_pointers(mdist[i,tmpinds],nodeFlag[tmpinds],i)
-#    tmpprev,tmpnext,tmpHedInd,tmpHedVal = gen_pointers(mdist[i,tmpinds],nodeFlag[tmpinds],0)
-#    mprev[i,tmpinds] = tmpinds[tmpprev]
-#    mnext[i,tmpinds] = tmpinds[tmpnext]
-#    hedInd[i] = tmpinds[tmpHedInd]
-#    hedVal[i] = tmpHedVal    
 
 def gen_pointers1(arr, valinds):
     if valinds.size==0:
@@ -215,11 +214,11 @@ def gen_pointers1(arr, valinds):
     
     idx = np.argsort(arr)
     
-    prevVec = np.zeros(idx.shape[0],'uint32')+constants.DEL_VAL
+    prevVec = np.zeros(idx.shape[0],constants.DATA_TYPE)+constants.DEL_VAL
     prevVec[idx[1:]] = valinds[idx[0:-1]]
     prevVec[idx[0]] = constants.HED_VAL
     
-    nextVec = np.zeros(idx.shape[0],'uint32')+constants.DEL_VAL
+    nextVec = np.zeros(idx.shape[0],constants.DATA_TYPE)+constants.DEL_VAL
     nextVec[idx[:-1]] = valinds[idx[1:]]
     nextVec[idx[-1]] = constants.END_VAL
     
@@ -237,24 +236,24 @@ X=np.random.randint(0,2,(n,d),dtype='uint8')
 
 constants.init(n,d)
 
-mdist = np.zeros((n,n),dtype='uint32')
+mdist = np.zeros((n,n),dtype=constants.DATA_TYPE)
 for i in range(n):
     for j in range(i+1,n):
         mdist[i,j] = d-sum(np.equal(X[i,:],X[j,:]))
 
 nodeFlag = np.ones(n)>0
 
-hedInd = np.zeros(n-1,dtype='uint32')
-hedVal = np.zeros(n-1,dtype='uint32')
+hedInd = np.zeros(n-1,dtype=constants.DATA_TYPE)
+hedVal = np.zeros(n-1,dtype=constants.DATA_TYPE)
 
-mprev = np.zeros((n,n),dtype='uint32')
-mnext = np.zeros((n,n),dtype='uint32')
+mprev = np.zeros((n,n),dtype=constants.DATA_TYPE)
+mnext = np.zeros((n,n),dtype=constants.DATA_TYPE)
 
 for i in range(n-1):
     tmpinds = i + 1 + np.where(nodeFlag[i+1:])[0]
     mprev[i,tmpinds],mnext[i,tmpinds],hedInd[i],hedVal[i] = gen_pointers(mdist[i,tmpinds],nodeFlag[tmpinds],i+1)
 
-treeNodeArr=np.arange(constants.N_NODE,dtype='uint32')
+treeNodeArr=np.arange(constants.N_NODE,dtype=constants.DATA_TYPE)
 Z = np.zeros((constants.N_NODE-1,3),dtype='float')
 
 for i in range(constants.N_NODE-1):
