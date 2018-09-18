@@ -482,6 +482,173 @@ def prepare_block_data(bdist,bprev,bnext,distMat,prevMat,nextMat,beditPrev,bedit
     beditPrev.clear(bk)
     beditNext.clear(bk)
 
+
+def linkage_block(X):
+
+    ###############  prepare data  ##########################
+    n,d=X.shape
+    constants.init(n,d)
+    
+    #beditPrev = editPool(constants.N_BLOCK, constants.BLOCK_SIZE)
+    #beditNext = editPool(constants.N_BLOCK, constants.BLOCK_SIZE)
+    #beditDist = editPool(constants.N_BLOCK, constants.BLOCK_SIZE)
+    
+    beditPrev = editPool()
+    beditNext = editPool()
+    
+    nodeFlag = np.zeros(constants.N_BLOCK*constants.BLOCK_SIZE, dtype=bool)
+    nodeFlag[:n]=True
+    blockFlag = np.ones(constants.N_BLOCK)>0
+    blockCount = np.zeros(constants.N_BLOCK)+constants.BLOCK_SIZE
+    if constants.N_NODE%constants.BLOCK_SIZE!=0:
+        blockCount[-1]=constants.N_NODE%constants.BLOCK_SIZE
+    
+    hedInd = np.zeros(n-1,dtype=constants.DATA_TYPE)
+    hedVal = np.zeros(n-1,dtype=constants.DATA_TYPE)
+    
+    bprev = np.zeros((constants.N_BLOCK,constants.N_BLOCK),dtype=object)
+    bnext = np.zeros((constants.N_BLOCK,constants.N_BLOCK),dtype=object)
+    bdist = np.zeros((constants.N_BLOCK,constants.N_BLOCK),dtype=object)
+    for bi in range(0,constants.N_BLOCK):
+        for bj in range(bi,constants.N_BLOCK):
+            bdist[bi,bj]=cal_dist_block(X, bi, bj)
+    
+    nb = constants.N_BLOCK
+    bs = constants.BLOCK_SIZE
+    prevMat = np.zeros((bs,nb*bs),dtype=constants.DATA_TYPE)
+    nextMat = np.zeros((bs,nb*bs),dtype=constants.DATA_TYPE)
+    distMat = np.zeros((bs,nb*bs),dtype=constants.DATA_TYPE)
+    
+    for bi in range(0,constants.N_BLOCK):
+        # initialize the prevMat, nextMat, distMat
+        get_mat_from_blocks(bdist,blockFlag,bi,distMat)
+    #    print(distMat)
+    #    print(prevMat)
+    #    print(nextMat)
+        for ii in range(0,constants.BLOCK_SIZE):
+            mi = constants.BLOCK_SIZE*bi+ii
+            if mi>=constants.N_NODE-1:
+                continue
+            hedInd[mi],hedVal[mi]=gen_pointers2(distMat[ii,:], nodeFlag, mi, prevMat[ii,:], nextMat[ii,:])
+        
+    #    print_mat(bdist,'dist')
+    #    print_mat(bprev,'prev')
+    #    print_mat(bnext,'next')    
+        
+        distribute_mat_to_blocks(prevMat,blockFlag,bi,bprev)  
+        distribute_mat_to_blocks(nextMat,blockFlag,bi,bnext)
+    
+    
+    ###############  core algorithm  ##########################
+    # complete linkage core algorithm
+    
+    treeNodeArr=np.arange(constants.N_NODE,dtype=constants.DATA_TYPE)
+    Z = np.zeros((constants.N_NODE-1,3),dtype='float')
+    
+    for iStep in range(constants.N_NODE-1):
+        minind,minval = constants.mymin(hedVal)
+        
+        ii = minind
+        jj = hedInd[ii]
+        
+        assert(jj>ii)
+        assert(nodeFlag[jj])
+        
+    #    print_mat(bdist,'dist')
+    #    print_mat(bprev,'prev')
+    #    print_mat(bnext,'next')
+    #    print(hedVal)
+    #    print(hedInd)
+    #    print(nodeFlag)
+    
+        
+#        print('%dth step, merge index-node %d-%d and %d-%d.\n' % (iStep,ii,treeNodeArr[ii],jj,treeNodeArr[jj]))
+        
+        
+        Z[iStep,0:2] = np.sort(treeNodeArr[[ii,jj]])
+        Z[iStep,2] = minval
+        
+        # merge ii and jj, update distance matrix
+        nodeFlag[jj]=False
+        update_pair_dist(bdist, nodeFlag, blockFlag, ii, jj)
+        # clear bdist?
+        
+        
+        treeNodeArr[ii] = iStep+constants.N_NODE
+        treeNodeArr[jj] = 0
+        
+        nodeFlag[jj]=True
+        
+        [bii, iii] = constants.getbi(ii);
+        [bjj, jjj] = constants.getbi(jj);
+    
+        for bk in range(0,bii):
+            # clear beditPrev, beditNext
+            # load block mat of prevMat, nextMat from bprev, bnext
+            prepare_block_data(bdist,bprev,bnext,distMat,prevMat,nextMat,beditPrev,beditNext,blockFlag,bk)
+            for kk in range(0,constants.BLOCK_SIZE):
+                mk = constants.getmi(bk,kk)
+                if nodeFlag[mk]:
+                    hedInd[mk],hedVal[mk]=del2ins1(distMat[kk,:], prevMat[kk,:], nextMat[kk,:], hedInd[mk], kk, ii, jj, beditPrev, beditNext)
+            update_blocks(bprev, beditPrev, bk)
+            update_blocks(bnext, beditNext, bk)    
+            
+    #    print_mat(bprev,'prev')
+    #    print_mat(bnext,'next')
+    #    print(hedVal)
+    #    print(hedInd)
+    
+        for bk in range(bii,bii+1):
+            prepare_block_data(bdist,bprev,bnext,distMat,prevMat,nextMat,beditPrev,beditNext,blockFlag,bk)
+            for kk in range(0,iii):
+                mk = constants.getmi(bk,kk)
+                if nodeFlag[mk]:
+                    hedInd[mk],hedVal[mk]=del2ins1(distMat[kk,:], prevMat[kk,:], nextMat[kk,:], hedInd[mk], kk, ii, jj, beditPrev, beditNext)
+    
+            # hand iith row
+            nodeFlag[jj]=False
+            hedInd[ii],hedVal[ii]=gen_pointers3(distMat[iii,:], nodeFlag, ii, prevMat[iii,:], nextMat[iii,:], iii, beditPrev, beditNext)
+    #        gen_pointers2(distMat[iii,:], nodeFlag, ii, prevMat[iii,:], nextMat[iii,:])
+    #        nodeFlag[jj]=True
+    
+            if bii==bjj:
+                endRowInd=jjj
+            else:
+                endRowInd=constants.BLOCK_SIZE
+            for kk in range(iii+1,endRowInd):
+                mk = constants.getmi(bk,kk)
+                if nodeFlag[mk]:
+                    hedInd[mk],hedVal[mk] = del_pointers(distMat[kk,:], prevMat[kk,:], nextMat[kk,:], hedInd[mk], kk, jj, beditPrev, beditNext)
+    #        print(hedVal)
+            update_blocks_rowinsertion(bprev, beditPrev, bk)
+            update_blocks_rowinsertion(bnext, beditNext, bk)
+    
+    #    print(hedVal)   
+        for bk in range(bii+1,bjj+1):
+            # clear beditPrev, beditNext
+            # load block mat of prevMat, nextMat from bprev, bnext
+            prepare_block_data(bdist,bprev,bnext,distMat,prevMat,nextMat,beditPrev,beditNext,blockFlag,bk)
+            if bk==bjj:
+                endRowInd=jjj
+            else:
+                endRowInd=constants.BLOCK_SIZE
+            for kk in range(0,endRowInd):
+                mk = constants.getmi(bk,kk)
+                if nodeFlag[mk]:
+                    hedInd[mk],hedVal[mk] = del_pointers(distMat[kk,:], prevMat[kk,:], nextMat[kk,:], hedInd[mk], kk, jj, beditPrev, beditNext)
+            update_blocks(bprev, beditPrev, bk)
+            update_blocks(bnext, beditNext, bk)     
+    #    print(hedVal)
+        nodeFlag[jj]=False
+        if jj<constants.N_NODE-1:
+            hedInd[jj]=constants.DEL_VAL
+            hedVal[jj]=constants.DEL_VAL
+        
+        blockCount[bjj] -= 1
+        blockFlag = blockCount>0
+
+    return Z
+    
 ###############  generate data  ##########################
 
 n=np.random.randint(50,200)
@@ -493,171 +660,51 @@ X=np.random.randint(0,2,(n,d),dtype='uint8')
 
 #X = np.load('tmpX.npy')
 #n,d = X.shape
-
-###############  prepare data  ##########################
-
-constants.init(n,d)
-
-#beditPrev = editPool(constants.N_BLOCK, constants.BLOCK_SIZE)
-#beditNext = editPool(constants.N_BLOCK, constants.BLOCK_SIZE)
-#beditDist = editPool(constants.N_BLOCK, constants.BLOCK_SIZE)
-
-beditPrev = editPool()
-beditNext = editPool()
-
-nodeFlag = np.zeros(constants.N_BLOCK*constants.BLOCK_SIZE, dtype=bool)
-nodeFlag[:n]=True
-blockFlag = np.ones(constants.N_BLOCK)>0
-blockCount = np.zeros(constants.N_BLOCK)+constants.BLOCK_SIZE
-if constants.N_NODE%constants.BLOCK_SIZE!=0:
-    blockCount[-1]=constants.N_NODE%constants.BLOCK_SIZE
-
-hedInd = np.zeros(n-1,dtype=constants.DATA_TYPE)
-hedVal = np.zeros(n-1,dtype=constants.DATA_TYPE)
-
-bprev = np.zeros((constants.N_BLOCK,constants.N_BLOCK),dtype=object)
-bnext = np.zeros((constants.N_BLOCK,constants.N_BLOCK),dtype=object)
-bdist = np.zeros((constants.N_BLOCK,constants.N_BLOCK),dtype=object)
-for bi in range(0,constants.N_BLOCK):
-    for bj in range(bi,constants.N_BLOCK):
-        bdist[bi,bj]=cal_dist_block(X, bi, bj)
-
-nb = constants.N_BLOCK
-bs = constants.BLOCK_SIZE
-prevMat = np.zeros((bs,nb*bs),dtype=constants.DATA_TYPE)
-nextMat = np.zeros((bs,nb*bs),dtype=constants.DATA_TYPE)
-distMat = np.zeros((bs,nb*bs),dtype=constants.DATA_TYPE)
-
-for bi in range(0,constants.N_BLOCK):
-    # initialize the prevMat, nextMat, distMat
-    get_mat_from_blocks(bdist,blockFlag,bi,distMat)
-#    print(distMat)
-#    print(prevMat)
-#    print(nextMat)
-    for ii in range(0,constants.BLOCK_SIZE):
-        mi = constants.BLOCK_SIZE*bi+ii
-        if mi>=constants.N_NODE-1:
-            continue
-        hedInd[mi],hedVal[mi]=gen_pointers2(distMat[ii,:], nodeFlag, mi, prevMat[ii,:], nextMat[ii,:])
+#Z=linkage_block(X)
     
-#    print_mat(bdist,'dist')
-#    print_mat(bprev,'prev')
-#    print_mat(bnext,'next')    
-    
-    distribute_mat_to_blocks(prevMat,blockFlag,bi,bprev)  
-    distribute_mat_to_blocks(nextMat,blockFlag,bi,bnext)
+def hamming_dist(u,v):
+    d = 0
+    for (i,j) in zip(u,v):
+        d += not np.equal(i,j)
+    return d
+
+#n=np.random.randint(50,200)
+#n = 6
+#d = 10
+#d=np.random.randint(20,100)
+#X=np.random.randint(0,2,(n,d),dtype='uint8')
+
+#from scipy.cluster.hierarchy import linkage
+#from scipy.spatial.distance import hamming
+
+from mylinke_single_euclidean import mylinkage
 
 
-###############  core algorithm  ##########################
-# complete linkage core algorithm
-
-treeNodeArr=np.arange(constants.N_NODE,dtype=constants.DATA_TYPE)
-Z = np.zeros((constants.N_NODE-1,3),dtype='float')
-
-for iStep in range(constants.N_NODE-1):
-    minind,minval = constants.mymin(hedVal)
+for i in range(100):
+    print('test round %d' % i)
+#    n=np.random.randint(10,200)
+#    #n = 6
+#    d = 10
+#    X=np.random.rand(n,d)*100
     
-    ii = minind
-    jj = hedInd[ii]
+    # test with hamming distance,the setting can easily lead to distance ties, 
+    # which means we can merge differe nodes and both are correct
+    n=np.random.randint(50,200)
+    d=np.random.randint(20,100)
+    X=np.random.randint(0,2,(n,d),dtype='uint8')
+            
+    #X = np.load('XX.npy')
+    Z = linkage_block(X)
     
-    assert(jj>ii)
-    assert(nodeFlag[jj])
+    Z1=mylinkage(X)
     
-#    print_mat(bdist,'dist')
-#    print_mat(bprev,'prev')
-#    print_mat(bnext,'next')
-#    print(hedVal)
-#    print(hedInd)
-#    print(nodeFlag)
-
+#    Z1 = linkage(X,method='complete',metric='euclidean')
+#    Z1 = linkage(X,method='complete',metric=hamming_dist)
     
-    print('%dth step, merge index-node %d-%d and %d-%d.\n' % (iStep,ii,treeNodeArr[ii],jj,treeNodeArr[jj]))
+    #print(Z)
+    #print(Z1)
     
-    
-    Z[iStep,0:2] = np.sort(treeNodeArr[[ii,jj]])
-    Z[iStep,2] = minval
-    
-    # merge ii and jj, update distance matrix
-    nodeFlag[jj]=False
-    update_pair_dist(bdist, nodeFlag, blockFlag, ii, jj)
-    # clear bdist?
-    
-    
-    treeNodeArr[ii] = iStep+constants.N_NODE
-    treeNodeArr[jj] = 0
-    
-    nodeFlag[jj]=True
-    
-    [bii, iii] = constants.getbi(ii);
-    [bjj, jjj] = constants.getbi(jj);
-
-    for bk in range(0,bii):
-        # clear beditPrev, beditNext
-        # load block mat of prevMat, nextMat from bprev, bnext
-        prepare_block_data(bdist,bprev,bnext,distMat,prevMat,nextMat,beditPrev,beditNext,blockFlag,bk)
-        for kk in range(0,constants.BLOCK_SIZE):
-            mk = constants.getmi(bk,kk)
-            if nodeFlag[mk]:
-                hedInd[mk],hedVal[mk]=del2ins1(distMat[kk,:], prevMat[kk,:], nextMat[kk,:], hedInd[mk], kk, ii, jj, beditPrev, beditNext)
-        update_blocks(bprev, beditPrev, bk)
-        update_blocks(bnext, beditNext, bk)    
-        
-#    print_mat(bprev,'prev')
-#    print_mat(bnext,'next')
-#    print(hedVal)
-#    print(hedInd)
-
-    for bk in range(bii,bii+1):
-        prepare_block_data(bdist,bprev,bnext,distMat,prevMat,nextMat,beditPrev,beditNext,blockFlag,bk)
-        for kk in range(0,iii):
-            mk = constants.getmi(bk,kk)
-            if nodeFlag[mk]:
-                hedInd[mk],hedVal[mk]=del2ins1(distMat[kk,:], prevMat[kk,:], nextMat[kk,:], hedInd[mk], kk, ii, jj, beditPrev, beditNext)
-
-        # hand iith row
-        nodeFlag[jj]=False
-        hedInd[ii],hedVal[ii]=gen_pointers3(distMat[iii,:], nodeFlag, ii, prevMat[iii,:], nextMat[iii,:], iii, beditPrev, beditNext)
-#        gen_pointers2(distMat[iii,:], nodeFlag, ii, prevMat[iii,:], nextMat[iii,:])
-#        nodeFlag[jj]=True
-
-        if bii==bjj:
-            endRowInd=jjj
-        else:
-            endRowInd=constants.BLOCK_SIZE
-        for kk in range(iii+1,endRowInd):
-            mk = constants.getmi(bk,kk)
-            if nodeFlag[mk]:
-                hedInd[mk],hedVal[mk] = del_pointers(distMat[kk,:], prevMat[kk,:], nextMat[kk,:], hedInd[mk], kk, jj, beditPrev, beditNext)
-#        print(hedVal)
-        update_blocks_rowinsertion(bprev, beditPrev, bk)
-        update_blocks_rowinsertion(bnext, beditNext, bk)
-#        update_blocks(bprev, beditPrev, bk)
-#        update_blocks(bnext, beditNext, bk)
-#    print(hedVal)   
-    for bk in range(bii+1,bjj+1):
-        # clear beditPrev, beditNext
-        # load block mat of prevMat, nextMat from bprev, bnext
-        prepare_block_data(bdist,bprev,bnext,distMat,prevMat,nextMat,beditPrev,beditNext,blockFlag,bk)
-        if bk==bjj:
-            endRowInd=jjj
-        else:
-            endRowInd=constants.BLOCK_SIZE
-        for kk in range(0,endRowInd):
-            mk = constants.getmi(bk,kk)
-            if nodeFlag[mk]:
-                hedInd[mk],hedVal[mk] = del_pointers(distMat[kk,:], prevMat[kk,:], nextMat[kk,:], hedInd[mk], kk, jj, beditPrev, beditNext)
-        update_blocks(bprev, beditPrev, bk)
-        update_blocks(bnext, beditNext, bk)     
-#    print(hedVal)
-    nodeFlag[jj]=False
-    if jj<constants.N_NODE-1:
-        hedInd[jj]=constants.DEL_VAL
-        hedVal[jj]=constants.DEL_VAL
-    
-    blockCount[bjj] -= 1
-    blockFlag = blockCount>0
-    
-    
+    assert(np.all(Z-Z1[:,:3]<1e-3))    
     
     
 

@@ -229,7 +229,7 @@ def gen_pointers1(arr, valinds):
     return (prevVec, nextVec, hedInd, hedVal)        
 
 def mylinkage(X):
-    from scipy.spatial.distance import euclidean
+#    from scipy.spatial.distance import euclidean
     n,d = X.shape
 
     constants.init(n,d)
@@ -238,8 +238,9 @@ def mylinkage(X):
     mdist = np.zeros((n,n))
     for i in range(n):
         for j in range(i+1,n):
-#            mdist[i,j] = d-sum(np.equal(X[i,:],X[j,:]))
-            mdist[i,j] = euclidean(X[i,:],X[j,:])
+            mdist[i,j] = d-sum(np.equal(X[i,:],X[j,:]))
+#            mdist[i,j] = (d-sum(np.equal(X[i,:],X[j,:])))/d
+#            mdist[i,j] = euclidean(X[i,:],X[j,:])
     
     nodeFlag = np.ones(n)>0
     
@@ -315,32 +316,37 @@ def hamming_dist(u,v):
         d += not np.equal(i,j)
     return d
 
-#n=np.random.randint(50,200)
-#n = 6
-#d = 10
-#d=np.random.randint(20,100)
-#X=np.random.randint(0,2,(n,d),dtype='uint8')
-
-
-for i in range(100):
-    print('test round %d' % i)
-    n=np.random.randint(10,200)
-    #n = 6
-    d = 10
-    X=np.random.rand(n,d)*100
-    
-    from scipy.cluster.hierarchy import linkage
-    #from scipy.spatial.distance import hamming
-    
-            
-    #X = np.load('XX.npy')
-    Z = mylinkage(X)
-    Z1 = linkage(X,method='complete',metric='euclidean')
-    
-    #print(Z)
-    #print(Z1)
-    
-    assert(np.all(Z-Z1[:,:3]<1e-3))
+##n=np.random.randint(50,200)
+##n = 6
+##d = 10
+##d=np.random.randint(20,100)
+##X=np.random.randint(0,2,(n,d),dtype='uint8')
+#
+#from scipy.cluster.hierarchy import linkage
+##from scipy.spatial.distance import hamming
+#
+#for i in range(100):
+#    print('test round %d' % i)
+#    n=np.random.randint(10,200)
+#    #n = 6
+#    d = 10
+#    X=np.random.rand(n,d)*100
+#    
+#    # test with hamming distance,the setting can easily lead to distance ties, 
+#    # which means we can merge differe nodes and both are correct
+#    #n=np.random.randint(50,200)
+#    #d=np.random.randint(20,100)
+#    #X=np.random.randint(0,2,(n,d),dtype='uint8')
+#            
+#    #X = np.load('XX.npy')
+#    Z = mylinkage(X)
+#    Z1 = linkage(X,method='complete',metric='euclidean')
+##    Z1 = linkage(X,method='complete',metric=hamming_dist)
+#    
+#    #print(Z)
+#    #print(Z1)
+#    
+#    assert(np.all(Z-Z1[:,:3]<1e-3))
 
 
     
