@@ -570,7 +570,7 @@ def linkage_block(X):
             hedVal[jj]=constants.DEL_VAL
         
         blockCount[bjj] -= 1
-        blockFlag = blockCount>0
+        blockFlag[bjj] = blockCount[bjj]>0
 
     return Z
     

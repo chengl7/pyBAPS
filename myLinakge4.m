@@ -224,6 +224,128 @@ for iStep=1:n-1
 %     [hedInd hedVal]
 end
 
+function y = calDist(X, bi, bj)
+global BLOCK_SIZE
+global N_NODE
+assert(bi<=bj);
+indsi = getmi(bi,1):getmi(bi,BLOCK_SIZE);
+indsj = getmi(bj,1):getmi(bj,BLOCK_SIZE);
+y = zeros(BLOCK_SIZE,BLOCK_SIZE);
+for i=1:BLOCK_SIZE
+    for j=1:BLOCK_SIZE
+        ii = indsi(i);
+        jj = indsj(j);
+        if ii>=jj || ii>N_NODE || jj>N_NODE
+            continue
+        else
+            y(i,j) = sqrt((X(ii,:)-X(jj,:))*(X(ii,:)-X(jj,:))');
+        end
+    end
+end
+
+function [resMat, offset] = getMatBlock(bmat,blockFlag,bi)
+% concatenate the blocks of bi row
+global DEL_VAL
+global BLOCK_SIZE
+global N_BLOCK
+
+offset = (bi-1)*BLOCK_SIZE;
+resMat = zeros(BLOCK_SIZE,BLOCK_SIZE*(N_BLOCK-bi+1))+DEL_VAL;
+
+for i=bi:N_BLOCK
+    ii = i-bi+1;
+    tmpinds = ((ii-1)*BLOCK_SIZE+1):(ii*BLOCK_SIZE);
+    if blockFlag(i)
+        resMat(:,tmpinds) = bmat{bi,i};
+    end
+end
+
+function resArr = distMatBlock(resMat)
+% distribute the combined matrix of bi row into blocks 
+global BLOCK_SIZE
+
+len = size(resMat,2);
+nb = len/BLOCK_SIZE;
+
+resArr = cell(1,nb);
+
+for i=1:nb
+    tmpinds = (i-1)*BLOCK_SIZE+(1:BLOCK_SIZE);
+    resArr{i} = resMat(:,tmpinds);
+end
+
+function [prevVec, nextVec, hedInd, hedVal] = genPointers(arr, flagArr, offset)
+
+global HED_VAL
+global END_VAL
+global DEL_VAL
+
+% devoted to handle the following case
+% e.g. in total 8 nodes, 4 merge with 8 and 5,6,7 are deleted
+% 8 will be delete so the input flagArr is all false
+if ~any(flagArr)
+    hedInd=DEL_VAL;
+    hedVal=DEL_VAL;
+    prevVec=[];
+    nextVec=[];
+    return;
+end
+
+flagInds = find(flagArr);
+
+[~, idx] = sort(arr(flagInds));
+nidx = [-offset-1 flagInds(idx) -offset-1];
+
+prevVec = zeros(size(idx))+DEL_VAL;
+prevVec(idx) = offset + nidx(1:end-2);
+try
+    prevVec(idx(1)) = HED_VAL;
+catch
+    keyboard
+end
+
+nextVec=zeros(size(idx))+DEL_VAL;
+nextVec(idx) = offset + nidx(3:end);
+nextVec(idx(end)) = END_VAL;
+
+hedInd = flagInds(idx(1)) + offset;
+hedVal = arr(flagInds(idx(1)));
+
+function y = calPairDist1(bdist,nodeFlag,i,j)
+% global DEL_VAL
+veci = extractRow1(bdist,i);
+vecj = extractRow1(bdist,j);
+y = zeros(size(veci));
+y(nodeFlag) = max(veci(nodeFlag),vecj(nodeFlag));
+
+function y = extractRow1(bdist,i)
+% global DEL_VAL
+
+global BLOCK_SIZE
+global N_BLOCK
+global N_NODE
+
+n=N_NODE;
+[bi, ii] = getbi(i);
+y = zeros(1,n);
+% y = zeros(1,n)+DEL_VAL;
+
+k=0;
+for bj=1:bi-1
+    y(k+1:k+BLOCK_SIZE)=bdist{bj,bi}(:,ii);
+    k=k+BLOCK_SIZE;
+end
+
+y(k+1:k+ii-1) = bdist{bi,bi}(1:ii-1,ii);
+y(k+ii+1:k+BLOCK_SIZE) = bdist{bi,bi}(ii,ii+1:end);
+k=k+BLOCK_SIZE;
+
+for bj=bi+1:N_BLOCK
+    y(k+1:k+BLOCK_SIZE)=bdist{bi,bj}(ii,:);
+    k=k+BLOCK_SIZE;
+end
+
+y = y(1:n);
 
 function bmat = updateBlocks(bmat, editpool, bi)
 % bi: update from block bi
@@ -268,73 +390,6 @@ for bk=bi:N_BLOCK
     end
 end
 
-function [prevvec, nextvec, tmpHedInd, tmpHedVal] = del2ins1(distvec, prevvec, nextvec, offset, hedInd, blockRowInd, ii, jj)
-[prevvec, nextvec, tmpHedInd] = delPointers(distvec, prevvec, nextvec, offset, hedInd, blockRowInd, ii);
-[prevvec, nextvec, tmpHedInd] = delPointers(distvec, prevvec, nextvec, offset, tmpHedInd, blockRowInd, jj);
-[prevvec, nextvec, tmpHedInd, tmpHedVal] = insertPointers(distvec, prevvec, nextvec, offset, tmpHedInd, blockRowInd, ii);
-
-function y = calDist(X, bi, bj)
-global BLOCK_SIZE
-global N_NODE
-assert(bi<=bj);
-indsi = getmi(bi,1):getmi(bi,BLOCK_SIZE);
-indsj = getmi(bj,1):getmi(bj,BLOCK_SIZE);
-y = zeros(BLOCK_SIZE,BLOCK_SIZE);
-for i=1:BLOCK_SIZE
-    for j=1:BLOCK_SIZE
-        ii = indsi(i);
-        jj = indsj(j);
-        if ii>=jj || ii>N_NODE || jj>N_NODE
-            continue
-        else
-            y(i,j) = sqrt((X(ii,:)-X(jj,:))*(X(ii,:)-X(jj,:))');
-        end
-    end
-end
-
-function [minVal, minInd] = mymin(vec)
-global DEL_VAL
-inds = find(vec~=DEL_VAL);
-[tmpVal, tmpInd]=min(vec(inds));
-minVal = tmpVal;
-minInd = inds(tmpInd);
-
-function y = calPairDist1(bdist,nodeFlag,i,j)
-% global DEL_VAL
-veci = extractRow1(bdist,i);
-vecj = extractRow1(bdist,j);
-y = zeros(size(veci));
-y(nodeFlag) = max(veci(nodeFlag),vecj(nodeFlag));
-
-function y = extractRow1(bdist,i)
-% global DEL_VAL
-
-global BLOCK_SIZE
-global N_BLOCK
-global N_NODE
-
-n=N_NODE;
-[bi, ii] = getbi(i);
-y = zeros(1,n);
-% y = zeros(1,n)+DEL_VAL;
-
-k=0;
-for bj=1:bi-1
-    y(k+1:k+BLOCK_SIZE)=bdist{bj,bi}(:,ii);
-    k=k+BLOCK_SIZE;
-end
-
-y(k+1:k+ii-1) = bdist{bi,bi}(1:ii-1,ii);
-y(k+ii+1:k+BLOCK_SIZE) = bdist{bi,bi}(ii,ii+1:end);
-k=k+BLOCK_SIZE;
-
-for bj=bi+1:N_BLOCK
-    y(k+1:k+BLOCK_SIZE)=bdist{bi,bj}(ii,:);
-    k=k+BLOCK_SIZE;
-end
-
-y = y(1:n);
-
 function bmat = updateMatRow(bmat, ri, colInds, vals)
 % updates row ri of the distance matrix
 assert(length(colInds)==length(vals))
@@ -350,6 +405,21 @@ for i=1:length(rowInds)
     [bi, bj, ii, jj] = mi2bi(rowInds(i),ci);
     bmat{bi,bj}(ii,jj) = vals(i);
 end
+
+function [minVal, minInd] = mymin(vec)
+global DEL_VAL
+inds = find(vec~=DEL_VAL);
+[tmpVal, tmpInd]=min(vec(inds));
+minVal = tmpVal;
+minInd = inds(tmpInd);
+
+function [resDist, resPrev, resNext, offsetD] = retrieveBlocks(bdist, bprev, bnext, blockFlag, bk)
+% global N_NODE
+% retrieve row bk for the block matrix
+
+[resDist, offsetD] = getMatBlock(bdist,blockFlag,bk);
+[resPrev, offsetP] = getMatBlock(bprev,blockFlag,bk);
+[resNext, offsetN] = getMatBlock(bnext,blockFlag,bk);
 
 function [prevVec, nextVec, hedInd, hedVal] = delPointers(distVec, prevVec, nextVec, offset, hedInd, rowInd, i)
 % delete the ith element from the double linked array
@@ -482,42 +552,15 @@ end
 % retrieve the distance of the hed element
 hedVal = distVec(hedInd-offset);
 
-function [prevVec, nextVec, hedInd, hedVal] = genPointers(arr, flagArr, offset)
+function [prevvec, nextvec, tmpHedInd, tmpHedVal] = del2ins1(distvec, prevvec, nextvec, offset, hedInd, blockRowInd, ii, jj)
+[prevvec, nextvec, tmpHedInd] = delPointers(distvec, prevvec, nextvec, offset, hedInd, blockRowInd, ii);
+[prevvec, nextvec, tmpHedInd] = delPointers(distvec, prevvec, nextvec, offset, tmpHedInd, blockRowInd, jj);
+[prevvec, nextvec, tmpHedInd, tmpHedVal] = insertPointers(distvec, prevvec, nextvec, offset, tmpHedInd, blockRowInd, ii);
 
-global HED_VAL
-global END_VAL
-global DEL_VAL
 
-% devoted to handle the following case
-% e.g. in total 8 nodes, 4 merge with 8 and 5,6,7 are deleted
-% 8 will be delete so the input flagArr is all false
-if ~any(flagArr)
-    hedInd=DEL_VAL;
-    hedVal=DEL_VAL;
-    prevVec=[];
-    nextVec=[];
-    return;
-end
 
-flagInds = find(flagArr);
 
-[~, idx] = sort(arr(flagInds));
-nidx = [-offset-1 flagInds(idx) -offset-1];
 
-prevVec = zeros(size(idx))+DEL_VAL;
-prevVec(idx) = offset + nidx(1:end-2);
-try
-    prevVec(idx(1)) = HED_VAL;
-catch
-    keyboard
-end
-
-nextVec=zeros(size(idx))+DEL_VAL;
-nextVec(idx) = offset + nidx(3:end);
-nextVec(idx(end)) = END_VAL;
-
-hedInd = flagInds(idx(1)) + offset;
-hedVal = arr(flagInds(idx(1)));
 
 function plotMatrix(dist, prev, next)
 clf
@@ -564,42 +607,4 @@ function [i,j] = bi2mi(bi, bj, ii, jj)
 i = getmi(bi,ii);
 j = getmi(bj,jj);
 
-function [resMat, offset] = getMatBlock(bmat,blockFlag,bi)
-% concatenate the blocks of bi row
-global DEL_VAL
-global BLOCK_SIZE
-global N_BLOCK
-
-offset = (bi-1)*BLOCK_SIZE;
-resMat = zeros(BLOCK_SIZE,BLOCK_SIZE*(N_BLOCK-bi+1))+DEL_VAL;
-
-for i=bi:N_BLOCK
-    ii = i-bi+1;
-    tmpinds = ((ii-1)*BLOCK_SIZE+1):(ii*BLOCK_SIZE);
-    if blockFlag(i)
-        resMat(:,tmpinds) = bmat{bi,i};
-    end
-end
-
-function resArr = distMatBlock(resMat)
-% distribute the combined matrix of bi row into blocks 
-global BLOCK_SIZE
-
-len = size(resMat,2);
-nb = len/BLOCK_SIZE;
-
-resArr = cell(1,nb);
-
-for i=1:nb
-    tmpinds = (i-1)*BLOCK_SIZE+(1:BLOCK_SIZE);
-    resArr{i} = resMat(:,tmpinds);
-end
-
-function [resDist, resPrev, resNext, offsetD] = retrieveBlocks(bdist, bprev, bnext, blockFlag, bk)
-% global N_NODE
-% retrieve row bk for the block matrix
-
-[resDist, offsetD] = getMatBlock(bdist,blockFlag,bk);
-[resPrev, offsetP] = getMatBlock(bprev,blockFlag,bk);
-[resNext, offsetN] = getMatBlock(bnext,blockFlag,bk);
 

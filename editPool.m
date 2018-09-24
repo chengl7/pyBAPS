@@ -60,8 +60,8 @@ classdef editPool
        function obj = sortEdit(obj,bi)
            for bk=bi:obj.N_BLOCK
               if obj.editFlag(bk)
-                  continue
-              else
+%                   continue
+%               else
                   obj.normEdit{bk} = sort(obj.normEdit{bk}); 
               end
            end
