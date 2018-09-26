@@ -1,8 +1,9 @@
 #!/bin/bash
 #SBATCH --time=0-00:05:00    # 5 mins
-#SBATCH -p short
-##SBATCH -p debug
+##SBATCH -p short
+#SBATCH -p debug
 #SBATCH -o a.out
+#SBATCH -e a.err
 #SBATCH -N 4
 ##SBATCH -n 4
 #SBATCH --mem=500    # 500MB of memory
@@ -13,7 +14,10 @@
 #echo $SLURM_JOB_NODELIST
 #srun hostname
 
+module load anaconda3
+
 server=$(echo "$SLURM_JOB_NODELIST" | cut -d ',' -f1)
+server=$(echo "$server" | cut -d '-' -f1)
 server=$(echo "$server" | tr -d '[')
 echo "list is ${SLURM_JOB_NODELIST} and server is ${server}"
 

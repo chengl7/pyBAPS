@@ -1,6 +1,7 @@
 # taskmanager.py
 
 import random, time
+import socket
 from multiprocessing.managers import BaseManager
 from queue import Queue
 
@@ -20,18 +21,24 @@ QueueManager.register('get_result_queue', callable=lambda: result_queue)
 manager = QueueManager(address=('', 5000), authkey=b'abc')
 # 启动Queue:
 manager.start()
+
+print("server estabished at: "+socket.gethostname())
+
 # 获得通过网络访问的Queue对象:
 task = manager.get_task_queue()
 result = manager.get_result_queue()
 # 放几个任务进去:
-for i in range(10):
+nTask=200
+for i in range(nTask):
     n = random.randint(0, 10)
     print('Put task %d...' % n)
     task.put(n)
 # 从result队列读取结果:
 print('Try get results...')
-for i in range(10):
-    r = result.get(timeout=10)
+for i in range(nTask):
+    r = result.get(block=True,timeout=20)
     print('Result: %s' % r)
 # 关闭:
+
+time.sleep(10) # allow client to quit
 manager.shutdown()
