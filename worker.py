@@ -1,7 +1,5 @@
-# taskworker.py
-
-import time, sys, socket
-from multiprocessing import Pool, current_process
+import time, sys, socket, random
+from multiprocessing import Pool
 from multiprocessing.managers import BaseManager
 
 def f(x):
@@ -9,56 +7,46 @@ def f(x):
     #print('run task %d * %d = %d' % (x, x, x*x))
     print('run task %d * %d = %d in %s' % (x, x, x*x, socket.gethostname()))
     sys.stdout.flush()
-    time.sleep(0.1)
+    time.sleep(random.random())
     # result.put(x*x)
     return x*x
 
 class QueueManager(BaseManager):
     pass
 
-QueueManager.register('get_task_queue')
-QueueManager.register('get_result_queue')
+QueueManager.register('get_gtask_queue')
+QueueManager.register('get_gres_queue')
 
-server_addr=sys.argv[1]
-
+# connect to server
+#server_addr=sys.argv[1]
+server_addr=socket.gethostname()
 nodename=socket.gethostname()
-
-time.sleep(5) # wait for the server to set up
+#time.sleep(1) # wait for the server to set up
+gPort=5000
+gKey=b'baps'
 print('%s Connect to server %s...' % (nodename,server_addr))
-m = QueueManager(address=(server_addr, 5000), authkey=b'abc')
-m.connect()
+gManager = QueueManager(address=(server_addr, gPort), authkey=gKey)
+gManager.connect()
 
-task = m.get_task_queue()
-result = m.get_result_queue()
+globalTaskQueue = gManager.get_gtask_queue()
+globalResultQueue = gManager.get_gres_queue()
 
 blocksize = 2
 
 with Pool(processes=4) as pool:
-    while not task.empty():
+    while not globalTaskQueue.empty():
 
-        mytask = [task.get() for i in range(blocksize) if not task.empty()]
+        mytask = [globalTaskQueue.get() for i in range(blocksize) if not globalTaskQueue.empty()]
         #print(mytask)
 
         res = pool.map(f, mytask)
         # print(res)
 
         for x in res:
-            result.put(x)
+            globalTaskQueue.task_done()
+            globalResultQueue.put(x)
 
         sys.stdout.flush()
         #print(result)
 
-# # 从task队列取任务,并把结果写入result队列:
-# task = m.get_task_queue()
-# result = m.get_result_queue()
-# for i in range(10):
-#     try:
-#         n = task.get(timeout=1)
-#         print('run task %d * %d...' % (n, n))
-#         r = '%d * %d = %d' % (n, n, n*n)
-#         time.sleep(1)
-#         result.put(r)
-#     except task.Empty:
-#         print('task queue is empty.')
-# 处理结束:
 print('worker %s exit.' % nodename)
