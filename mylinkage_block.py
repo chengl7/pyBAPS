@@ -680,7 +680,7 @@ def hamming_dist(u,v):
 from mylinke_single_euclidean import mylinkage
 
 
-for i in range(100):
+for i in range(1):
     print('test round %d' % i)
 #    n=np.random.randint(10,200)
 #    #n = 6
