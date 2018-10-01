@@ -31,8 +31,11 @@ nTask=20
 funcName='f'  # function name
 for i in range(nTask):
     n = random.randint(0, 10)
-    print('Put %dth task globalTaskQueue %d...' % (i, n))
-    globalTaskQueue.put((funcName,i,n))
+    print('Put %dth task globalTaskQueue %d...' % (i,n))
+    funcInd=0  # function index in funcList
+    taskInd=i
+    para = n   # parameters
+    globalTaskQueue.put((funcInd,taskInd,para))
     
 # retrieve results from the global queue
 print('Try get results...')
@@ -40,7 +43,6 @@ print('Try get results...')
 nRemTask=nTask
 while nRemTask>0:
     r = globalResultQueue.get(block=True) # can return None for some reason
-    
     if r:
         ind,res=r
         print('%dth Result: %d' % r)

@@ -1,4 +1,6 @@
 import time, sys, socket, random
+from common_base import funcList
+import multiprocessing as mp
 from multiprocessing import Pool
 from multiprocessing.managers import BaseManager
 
@@ -16,20 +18,23 @@ def run_task(tqe):
     tqe: task queue element
     resQueue: queue to put result
     '''
-    print(tqe)
-    funcname = tqe[0]
+#    print(tqe)
+    
+    funcIndex=tqe[0]
     index = tqe[1]
     para = tqe[2:]
     
-    func = getattr(sys.modules['__main__'],funcname)
+#    func = getattr(sys.modules['__main__'],funcname)
+    print(f'global func index: {funcIndex}')
+    func = globalFuncDict[funcList.get_func_name(funcIndex)]
     res = func(*para)
     
     globalResultQueue.put((index,res))
     
-
 class QueueManager(BaseManager):
     pass
 
+# global queues
 QueueManager.register('get_gtask_queue')
 QueueManager.register('get_gres_queue')
 
@@ -47,9 +52,11 @@ gManager.connect()
 globalTaskQueue = gManager.get_gtask_queue()
 globalResultQueue = gManager.get_gres_queue()
 
-blocksize = 2
+# set the global function list shared between server and worker
+globalFuncDict=funcList().get_func_dict()
 
-with Pool(processes=4) as pool:
+blocksize = mp.cpu_count()
+with Pool(processes=blocksize) as pool:
     while not globalTaskQueue.empty():
 
         mytask = [globalTaskQueue.get() for i in range(blocksize) if not globalTaskQueue.empty()]
