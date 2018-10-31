@@ -45,6 +45,7 @@ def fasta_iter(fastaFileName):
 def seq2int(seq):
     """
     transform DNA sequences to int np.array
+    other bases like '-' or 'N' are set to 0
     """
     base = {'A': 1, 'C': 2, 'G': 4, 'T': 8, 'a': 1, 'c': 2, 'g': 4, 't': 8}
     arr = np.zeros(len(seq), dtype='uint8')
@@ -84,7 +85,7 @@ def group_aln(seqAln, partition, datatype=None):
     :return: count matrix, ngroup x nloci x 4
     """
     
-    base_key = [1,2,4,8]
+    baseDict = {1:0,2:1,4:2,8:3}
     partition = np.array(partition)
 
     # assert that the partition is from 0 to n-1
@@ -96,7 +97,7 @@ def group_aln(seqAln, partition, datatype=None):
         datatype=get_data_type(np.max(unicnt))
     
     inds = np.argsort(partition)
-    nGroup = len(set(partition))
+    nGroup = len(unipart)
     nseq, nloci = seqAln.shape
     cntAln = np.zeros((nGroup, nloci, 4), dtype=datatype)
 
@@ -107,10 +108,9 @@ def group_aln(seqAln, partition, datatype=None):
         
         # count seqAln into cntAln
         for j in range(nloci):
-            tmpc = Counter(seqAln[tmpinds,j])
-            for bi,bk in enumerate(base_key):
-                cntAln[k,j,bi] = tmpc[bk]
-        
+            tmpbasearr,tmpcntarr = np.unique(seqAln[tmpinds,j],return_counts=True)
+            for tmpbase,tmpcnt in zip(tmpbasearr,tmpcntarr):
+                cntAln[k,j,baseDict[tmpbase]]=tmpcnt   
         offset += tmplen
         
     return cntAln    
@@ -124,19 +124,36 @@ def cal_logml(cntMat):
     for i in range(cntMat.shape[0]):
         tmp = gammaln(cntMat[i]+alpha)-gammaln(alpha)
         tmps = sum(tmp) - gammaln(sum(cntMat[i])+1)
-        logml =+ tmps
+        logml += tmps
     return logml    
 
 def cal_logml1(cntMat, eleLGArr, sumLGArr):
     '''
-    cntMat is a nloci x 4 numpy matrix
+    cntMat is a npop x nloci x 4 numpy matrix
     '''
     logml = 0
     for i in range(cntMat.shape[0]):
 #        tmp = gammaln(cntMat[i]+alpha)-gammaln(alpha)
         tmp = eleLGArr[cntMat[i]]
-        tmps = sum(tmp) - sumLGArr[sum(cntMat[i])]
-        logml =+ tmps
+        tmps = np.sum(tmp,axis=1) - sumLGArr[np.sum(cntMat[i],axis=1)]
+        logml += np.sum(tmps)
+    return logml
+
+def cal_logml2(cntMat, logmlMat, popFlagArr, eleLGArr, sumLGArr):
+    '''
+    cntMat is a npop x nloci x 4 numpy matrix
+    logmlMat: nloci x npop
+    popFlagArr: npop x 1
+    '''
+    logml = 0
+    for i in range(cntMat.shape[0]):
+        if popFlagArr[i]:
+            continue
+#        tmp = gammaln(cntMat[i]+alpha)-gammaln(alpha)
+        tmp = eleLGArr[cntMat[i]]
+        tmps = np.sum(tmp,axis=1) - sumLGArr[np.sum(cntMat[i],axis=1)]
+        logmlMat[:,i] = tmps[:]
+        logml += np.sum(tmps)
     return logml
 
 def update_cnt_mat(grpAln, partition, popCntMat, partInds):
@@ -144,13 +161,53 @@ def update_cnt_mat(grpAln, partition, popCntMat, partInds):
     update count matrix (cntMat) for the given set of cluster index
     grpAln: ngrp x nloci x 4
     partition: ngrp x 1, partition of the groups
-    popCntMat: npop x nloci x 4
+    popCntMat: nMaxPop x nloci x 4
     partInds: index of the clusters to be updated
     '''
     for i in partInds:
-        popCntMat[i] = np.sum(grpAln[partition==i,:,:],axis=0)
+        popCntMat[i] = np.sum(grpAln[partition==i,:,:],axis=0)        
 
+# to do, check how to decide the outliers
+def get_pop_outliers(partition, popFlagArr, iPop):
+    '''
+    get outliers of population "iPop"
+    '''
+    inds = np.where(partition==iPop)[0] # all indexes of ith population
+    return inds
 
+# to do
+def move_cluster(grpAln, partition, popCntMat, iPop):
+    '''
+    try moving the outlier points/groups of "iPop"th cluster to other populations
+    :return mIndArr: index of the groups to be moved, a list
+    :return tPopArr: index of of the target cluster for each group to be moved
+    :return incLogml: increase in the logml after the movement
+    '''
+    inds = get_pop_outliers(partition, iPop)
+    nind = len(inds)
+    delDiff = np.zeros()
+    
+    
+    return mIndArr,tPopArr,incLogml
+
+# to do
+def update_count_mat_move(grpAln, partition, popCntMat, mIndArr,tPopArr):
+    '''
+    update the population count matrix by moving elements of mIndArr to tPopArr
+    '''
+    idx = np.argsort(tPopArr)
+    tPopArr = tPopArr[idx]
+    mIndArr = mIndArr[idx]
+    offset=0
+    for k,g in groupby(tPopArr):
+        tmplen = sum([1 for _ in g])
+        tmpinds = mIndArr[offset:offset+tmplen]
+        
+        partition[tmpinds] = k
+        popCntMat[k,:,:] =+ np.sum(grpAln[tmpinds,:,:],axis=0)
+        
+    
+    
 
 if __name__ == "__main__":
     # execute only if run as a script
@@ -167,8 +224,8 @@ if __name__ == "__main__":
     # initialize log Gamma arrays for calculating the logml later
     nSeq=len(heds)
     alpha=0.25
-    eleLGArr=gammaln(np.arange(nSeq)+alpha)-gammaln(alpha)
-    sumLGArr=gammaln(np.arange(nSeq)+1)
+    eleLGArr=gammaln(np.arange(nSeq+1)+alpha)-gammaln(alpha)      # 0 to nSeq
+    sumLGArr=gammaln(np.arange(nSeq+1)+1)             # gamma(1) to gamma(nSeq+1)
     
     # initialize partition
 #    Z = sch.linkage(grpAln,method='complete', metric='hamming')
@@ -176,31 +233,54 @@ if __name__ == "__main__":
 #    nPop=np.max(partition)
     
     ngrp, nloci,_=grpAln.shape
-    nPop=8
-    _,partition = kmeans2(grpAln.reshape((ngrp,-1))+0.1,nPop)
+    nMaxPop=8
+    _,partition = kmeans2(grpAln.reshape((ngrp,-1))+0.1,nMaxPop)
+    logmlMat = np.full((nloci,nMaxPop), np.nan, dtype='double')
     
-    popCntMat = np.zeros((nPop, nloci, 4), dtype=get_data_type(nSeq))
-    partInds = np.arange(nPop, dtype=get_data_type(nSeq))
+    popFlagArr = np.ones(nMaxPop,dtype='bool')
+    popCntMat = np.zeros((nMaxPop, nloci, 4), dtype=get_data_type(nSeq))
+    partInds = np.arange(nMaxPop, dtype=get_data_type(nSeq))
     update_cnt_mat(grpAln, partition, popCntMat, partInds)
-        
+    
+#    logml = cal_logml1(popCntMat[popFlagArr,:,:], eleLGArr, sumLGArr)
+    logml = cal_logml2(popCntMat, logmlMat, popFlagArr, eleLGArr, sumLGArr)
+    print(f'Initial logml: {logml}')
+    
     # stochastic optimization
     optArr = np.random.randint(0,4,size=10)
     nTrial=0
     iOpt=0
     while iOpt<optArr.shape[0] and nTrial<10:
         
-#        opt = optArr[iOpt]
-#        if opt==0:  # split a cluster into 2
-#            # split cluster
-#        elif opt==1: # split a cluster and move a small cluster to 
+        opt = optArr[iOpt]
+        if opt==0:  # split a cluster and move a small cluster to others
+            incLogml = 0
+            for iPop in range(nMaxPop):
+                # try moving elements of iPop to other populations, check the if improved logml
+                if not popFlagArr[iPop]:
+                    continue
+                tmpIndArr, tmpPopArr, tmpIncLogml = move_cluster(grpAln, partition, popCntMat, iPop)
+                if tmpIncLogml>incLogml:
+                    mIndArr, mPopArr, incLogml = tmpIndArr, tmpPopArr, tmpIncLogml 
+            if incLogml>1e-9:
+                logml += incLogml
+                # move the elements to corresponding population
+                update_count_mat_move(grpAln, partition, popCntMat, mIndArr,mPopArr)
+            else:
+                nTrial += 1
+#        elif opt==1: # split a cluster into 2
 #            # move cluster
 #        elif opt==2:
+#            
 #            # merge cluster
-#        else:
-#             raise Exception(f'unkown operator {opt}.\n') 
-#        
+#            
+            
+            
+        else:
+             raise Exception(f'unkown operator {opt}.\n') 
+        
         iOpt += 1
-        nTrial += 1
+        
     
     
 
