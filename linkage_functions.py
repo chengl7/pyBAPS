@@ -5,6 +5,7 @@ import socket, sys, time, random
 import numpy as np
 from blockfilemmap import BlockFileMap
 from blockfilemmap import init_files
+import ctypes as ct
 
 def load_X_subset(b):
     Xsub = np.load("test_data/%d.npy" % b)    
@@ -27,12 +28,20 @@ def load_X_subset(b):
 #            resMat[:,tmpinds] = dist_block.read_all()
 #            dist_block.close()
 
-def sort_ii(distMatii, prevMatii, nextMatii, nodeFlag, hedIndmi, hedValmi, mi):
-    hedIndmi,hedValmi=gen_pointers2(distMatii, nodeFlag, mi, prevMatii, nextMatii)
-    return prevMatii, nextMatii, hedIndmi, hedValmi
+def sort_ii(ii, nodeFlag, hedIndmi, hedValmi, mi):
+    distMat = np.frombuffer(distMat_ptr, dtype=constants.DATA_TYPE)
+    prevMat = np.frombuffer(prevMat_ptr, dtype=constants.DATA_TYPE)
+    nextMat = np.frombuffer(nextMat_ptr, dtype=constants.DATA_TYPE)    
+    hedIndmi,hedValmi=gen_pointers2(distMat[ii:], nodeFlag, mi, prevMat[ii:], nextMat[ii:])
+    return hedIndmi, hedValmi
 
-def cal_dist_ij(xi, xj):
-    return sum(np.not_equal(xi,xj))
+#def cal_dist_ij(xi, xj):
+#    return sum(np.not_equal(xi,xj))
+
+#def cal_dist_sub(xi,xj):
+#    assert xj >= xi
+#    if xj > xi:
+#        for ri in range(xi, xj+1):    
 
 def del2ins1_local(hedInd_mk, rowind, ii, jj):
     distVec = lManager.get_ldistMat()[rowind,:]
@@ -71,6 +80,8 @@ class constants:
     DATA_FOLDER = None
     BLOCK_FOLDER = None
         
+    CTYPE = None
+
     @classmethod
     def init(cls, n, xlen, data_folder, block_folder):
         cls.N_NODE = n
@@ -91,6 +102,11 @@ class constants:
 
         cls.DATA_FOLDER = data_folder
         cls.BLOCK_FOLDER = block_folder
+
+        types = [ct.c_short, ct.c_ushort, ct.c_uint, ct.c_int, ct.c_long, ct.c_float, ct.c_double]
+        typed = {str(np.dtype(ctype)): ctype for ctype in types}
+        print(typed)
+        cls.CTYPE = typed[constants.DATA_TYPE]
         
     @classmethod
     def get_data_type(cls,n):
@@ -193,16 +209,23 @@ def cal_dist_block(X, bi, bj):
                 dismat[i,j] = sum(np.not_equal(X[ii,:],X[jj,:]))
     return dismat            
 
-def cal_dist_block_sub(subXi, subXj, bi, bj):
-    dismat=np.zeros((constants.BLOCK_SIZE,constants.BLOCK_SIZE),dtype=constants.DATA_TYPE)
-    for i,xi in enumerate(subXi):
-        for j,xj in enumerate(subXj):
-            # If bi == bj, we must only calc certain vals
-            if bi < bj or j > i:
-                ne = np.not_equal(subXi[i,:],subXj[j,:]).astype(int)
-                dismat[i,j] = sum(ne)
-    return dismat            
+#def cal_dist_block_sub(subXi, subXj, bi, bj):
+#    dismat=np.zeros((constants.BLOCK_SIZE,constants.BLOCK_SIZE),dtype=constants.DATA_TYPE)
+#    for i,xi in enumerate(subXi):
+#        for j,xj in enumerate(subXj):
+#            # If bi == bj, we must only calc certain vals
+#            if bi < bj or j > i:
+#                ne = np.not_equal(subXi[i,:],subXj[j,:]).astype(int)
+#                dismat[i,j] = sum(ne)
+#    return dismat            
 
+#def cal_dist_sub(xi):
+#    global dist_block_arr_ptr
+#    print(dist_block_arr_ptr)
+#    arr = np.frombuffer(dist_block_arr_ptr, dtype=constants.DATA_TYPE)
+#    start = (bi == bj) * xi
+#    for xj in range(start, xi+constants.BLOCK_SIZE):
+#        arr[xj] = sum(np.not_equal(subXi[xi], subXi[xj]))
 
 def init_block(X, bi, bj, base_directory):
     dist_block_arr = cal_dist_block(X, bi, bj)
