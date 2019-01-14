@@ -1,10 +1,87 @@
 import numpy as np
 import multiprocessing
+import math
 from multiprocessing import cpu_count
 from multiprocessing.managers import BaseManager, NamespaceProxy
 from multiprocessing.sharedctypes import RawArray
 from blockfilemmap import BlockFileMap
 from linkage_functions import *
+
+def cal_dist_sub(xi, diagonal_flag):
+    global dist_block_arr_ptr
+    print(dist_block_arr_ptr)
+    arr = np.frombuffer(dist_block_arr_ptr, dtype=constants.DATA_TYPE)
+    start = diagonal_flag * xi
+    for xj in range(start, xi+constants.BLOCK_SIZE):
+        arr[xj] = sum(np.not_equal(subXi[xi], subXi[xj]))
+
+def cal_dist(bi, bj):
+    """ 
+    Takes a block index bi, bj
+    Calculates the pairwise distances for the block
+    """
+    assert bj >= bi
+    # Load saved file
+    subXi = np.load("%s/%d.npy" % (constants.DATA_FOLDER, bi))
+    subXj = np.load("%s/%d.npy" % (constants.DATA_FOLDER, bj))
+
+#        dist_block_arr = np.zeros(shape=(constants.BLOCK_SIZE*constants.BLOCK_SIZE))
+#        dist_block_arr_ptr = RawArray(constants.CTYPE, dist_block_arr)
+    global dist_block_arr_ptr
+    dist_block_arr_ptr = RawArray(constants.CTYPE, constants.BLOCK_SIZE*constants.BLOCK_SIZE)
+    core_subset_size = int(math.ceil(constants.BLOCK_SIZE/self.nCores))
+    inds = [i*core_subset_size*constants.BLOCK_SIZE for i in range(self.nCores)]
+    diagonal_flag = (bi == bj)
+    tmpargs = zip([diagonal_flag for i in inds], inds)
+
+#        def cal_dist_sub(xi):
+#            arr = np.frombuffer(dist_block_arr_ptr, dtype=constants.DATA_TYPE)
+#            start = (bi == bj) * xi
+#            for xj in range(start, xi+constants.BLOCK_SIZE):
+#                arr[xj] = sum(np.not_equal(subXi[xi], subXi[xj]))
+
+    with multiprocessing.Pool(processes=self.nCores) as pool:
+        print(dist_block_arr_ptr)
+        results = pool.starmap(cal_dist_sub, tmpargs)            
+
+#        tmpargs = []
+#        tmpindi = []
+#        tmpindj = []
+    # Calculate elements; different indices to cal depending on bi, bj
+    # Also edge cases
+#        if bj > bi:
+#            ind = (np.arange(constants.BLOCK_SIZE), np.arange(constants.BLOCK_SIZE))
+#            for i in range(len(subXi)):
+#                for j in range(len((subXj))):
+#                    if not (i>=constants.N_NODE or j>=constants.N_NODE):
+#                        xi, xj = subXi[i], subXj[j]
+#                        tmpargs.append((xi, xj))
+#                        tmpindi.append(i)
+#                        tmpindj.append(j)
+
+#        elif bi == bj:
+#            for i in range(len(subXi)-1):
+#                for j in range(i+1, len((subXj))):
+#                    if not (i>=constants.N_NODE or j>=constants.N_NODE):
+#                        xi, xj = subXi[i], subXj[j]
+#                        tmpargs.append((xi, xj))
+#                        tmpindi.append(i)
+#                        tmpindj.append(j)
+
+    # divide len X into nCores parts, have cores write directly
+
+
+#        dist_block_arr[tmpindi, tmpindj] = results
+
+    # Pad with np.nans
+    # Write the result
+    bfd = "%s/%d_d/%d_d.block" % (constants.BLOCK_FOLDER, bi, bj)
+    dist_block = BlockFileMap(bfd, constants.DATA_TYPE, dist_block_arr.shape)
+    dist_block.open()
+    dist_block.write_all(dist_block_arr)
+    dist_block.close()
+    return bi, bj
+
 
 class LocalManager(BaseManager):
     pass
@@ -47,14 +124,20 @@ class Worker():
 
         # Set up constants and local variables
         bs, nb = constants.BLOCK_SIZE, constants.N_BLOCK
-        prevMat = np.zeros((bs,nb*bs),dtype=constants.DATA_TYPE)
-        nextMat = np.zeros((bs,nb*bs),dtype=constants.DATA_TYPE)
-        distMat = np.zeros((bs,nb*bs),dtype=constants.DATA_TYPE)
+#        prevMat = np.zeros((bs,nb*bs),dtype=constants.DATA_TYPE)
+#        nextMat = np.zeros((bs,nb*bs),dtype=constants.DATA_TYPE)
+#        distMat = np.zeros((bs,nb*bs),dtype=constants.DATA_TYPE)
 
+        # Create shared memory array pointers as global variables
         global prevMat_ptr, nextMat_ptr, distMat_ptr
-        prevMat_ptr = RawArray(constants.DATA_TYPE, bs*nb*bs)
-        nextMat_ptr = RawArray(constants.DATA_TYPE, bs*nb*bs)
-        distMat_ptr = RawArray(constants.DATA_TYPE, bs*nb*bs)
+        # get ctype for rawarray from dtype
+        prevMat_ptr = RawArray(constants.CTYPE, bs*nb*bs)
+        nextMat_ptr = RawArray(constants.CTYPE, bs*nb*bs)
+        distMat_ptr = RawArray(constants.CTYPE, bs*nb*bs)
+
+#        self.prevMat = np.frombuffer(prevMat, dtype=constants.DATA_TYPE)
+#        self.nextMat = np.frombuffer(nextMat, dtype=constants.DATA_TYPE)
+#        self.distMat = np.frombuffer(distMat_ptr, dtype=constants.DATA_TYPE)
 
 #        LocalManager.register('get_lprevMat', proxytype=ArrayProxy, exposed=None, callable=lambda: prevMat)
 #        LocalManager.register('get_lnextMat', proxytype=ArrayProxy, exposed=None, callable=lambda: nextMat)
@@ -110,56 +193,6 @@ class Worker():
         self.blockCount[bjj] -= 1
         self.blockFlag[bjj] = self.blockCount[bjj]>0
 
-    def cal_dist(self, bi, bj):
-        """ 
-        Takes a block index bi, bj
-        Calculates the pairwise distances for the block
-        """
-        assert bj >= bi
-        # Load saved file
-        subXi = np.load("%s/%d.npy" % (constants.DATA_FOLDER, bi))
-        subXj = np.load("%s/%d.npy" % (constants.DATA_FOLDER, bj))
-
-        dist_block_arr = np.zeros(shape=(constants.BLOCK_SIZE,constants.BLOCK_SIZE))
-
-        tmpargs = []
-        tmpindi = []
-        tmpindj = []
-
-        # Calculate elements; different indices to cal depending on bi, bj
-        # Also edge cases
-        if bj > bi:
-            ind = (np.arange(constants.BLOCK_SIZE), np.arange(constants.BLOCK_SIZE))
-            for i in range(len(subXi)):
-                for j in range(len((subXj))):
-                    if not (i>=constants.N_NODE or j>=constants.N_NODE):
-                        xi, xj = subXi[i], subXj[j]
-                        tmpargs.append((xi, xj))
-                        tmpindi.append(i)
-                        tmpindj.append(j)
-
-        elif bi == bj:
-            for i in range(len(subXi)-1):
-                for j in range(i+1, len((subXj))):
-                    if not (i>=constants.N_NODE or j>=constants.N_NODE):
-                        xi, xj = subXi[i], subXj[j]
-                        tmpargs.append((xi, xj))
-                        tmpindi.append(i)
-                        tmpindj.append(j)
-
-        with multiprocessing.Pool(processes=self.nCores) as pool:
-            results = pool.starmap(cal_dist_ij, tmpargs)
-
-        dist_block_arr[tmpindi, tmpindj] = results
-
-        # Pad with np.nans
-        # Write the result
-        bfd = "%s/%d_d/%d_d.block" % (constants.BLOCK_FOLDER, bi, bj)
-        dist_block = BlockFileMap(bfd, constants.DATA_TYPE, dist_block_arr.shape)
-        dist_block.open()
-        dist_block.write_all(dist_block_arr)
-        dist_block.close()
-        return bi, bj
 
     def sort_rows(self, bi):
         """
@@ -175,7 +208,9 @@ class Worker():
         for ii in range(0, constants.BLOCK_SIZE):
             mi = constants.BLOCK_SIZE*bi+ii
             if mi<constants.N_NODE-1:
-                tmpargs.append((self.distMat[ii,:], self.prevMat[ii,:], self.nextMat[ii,:], self.nodeFlag, self.hedInd[mi], self.hedVal[mi], mi))
+#                tmpargs.append((self.distMat[ii,:], self.prevMat[ii,:], self.nextMat[ii,:], self.nodeFlag, self.hedInd[mi], self.hedVal[mi], mi))
+                tmpargs.append((ii, self.nodeFlag, self.hedInd[mi], self.hedVal[mi], mi))
+
         with multiprocessing.Pool(processes=self.nCores) as pool:
             results = pool.starmap(sort_ii, tmpargs)
 
