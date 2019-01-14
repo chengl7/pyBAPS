@@ -2,18 +2,19 @@ import numpy as np
 import multiprocessing
 from multiprocessing import cpu_count
 from multiprocessing.managers import BaseManager, NamespaceProxy
+from multiprocessing.sharedctypes import RawArray
 from blockfilemmap import BlockFileMap
 from linkage_functions import *
 
 class LocalManager(BaseManager):
     pass
 
-class ArrayProxy(NamespaceProxy):
-    _exposed_ = ('__getattribute__', '__setattr__', '__delattr__', '__setitem__', '__getitem__')
-    def __getitem__(self, item):
-        return self._callmethod('__getitem__', (item,))
-    def __setitem__(self, item, val):
-        self._callmethod('__setitem__', (item,val,))
+#class ArrayProxy(NamespaceProxy):
+#    _exposed_ = ('__getattribute__', '__setattr__', '__delattr__', '__setitem__', '__getitem__')
+#    def __getitem__(self, item):
+#        return self._callmethod('__getitem__', (item,))
+#    def __setitem__(self, item, val):
+#        self._callmethod('__setitem__', (item,val,))
 
 class EditPoolProxy(NamespaceProxy):
     _exposed_ = ('__getattribute__', '__setattr__', '__delattr__', 'clear',
@@ -49,9 +50,15 @@ class Worker():
         prevMat = np.zeros((bs,nb*bs),dtype=constants.DATA_TYPE)
         nextMat = np.zeros((bs,nb*bs),dtype=constants.DATA_TYPE)
         distMat = np.zeros((bs,nb*bs),dtype=constants.DATA_TYPE)
-        LocalManager.register('get_lprevMat', proxytype=ArrayProxy, exposed=None, callable=lambda: prevMat)
-        LocalManager.register('get_lnextMat', proxytype=ArrayProxy, exposed=None, callable=lambda: nextMat)
-        LocalManager.register('get_ldistMat', proxytype=ArrayProxy, exposed=None, callable=lambda: distMat)
+
+        global prevMat_ptr, nextMat_ptr, distMat_ptr
+        prevMat_ptr = RawArray(constants.DATA_TYPE, bs*nb*bs)
+        nextMat_ptr = RawArray(constants.DATA_TYPE, bs*nb*bs)
+        distMat_ptr = RawArray(constants.DATA_TYPE, bs*nb*bs)
+
+#        LocalManager.register('get_lprevMat', proxytype=ArrayProxy, exposed=None, callable=lambda: prevMat)
+#        LocalManager.register('get_lnextMat', proxytype=ArrayProxy, exposed=None, callable=lambda: nextMat)
+#        LocalManager.register('get_ldistMat', proxytype=ArrayProxy, exposed=None, callable=lambda: distMat)
 
         # Start the manager
         lManager.start()
@@ -59,9 +66,13 @@ class Worker():
         # Get the variables
         self.beditPrev = lManager.get_lbeditPrev()
         self.beditNext = lManager.get_lbeditNext()
-        self.prevMat = lManager.get_lprevMat()
-        self.nextMat = lManager.get_lnextMat()
-        self.distMat = lManager.get_ldistMat()
+#        self.prevMat = lManager.get_lprevMat()
+#        self.nextMat = lManager.get_lnextMat()
+#        self.distMat = lManager.get_ldistMat()
+
+#        self.prevMat = lManager.get_lprevMat()
+#        self.nextMat = lManager.get_lnextMat()
+#        self.distMat = lManager.get_ldistMat()
 
         self.bprev = np.zeros((constants.N_BLOCK,constants.N_BLOCK),dtype=object)
         self.bnext = np.zeros((constants.N_BLOCK,constants.N_BLOCK),dtype=object)
