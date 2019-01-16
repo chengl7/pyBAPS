@@ -3,33 +3,268 @@ import multiprocessing
 import math
 import random
 import time
+from constants import constants
+from editpool import editPool
 from multiprocessing import cpu_count
 from multiprocessing.managers import BaseManager, NamespaceProxy
 from multiprocessing.sharedctypes import RawArray
 from blockfilemmap import BlockFileMap
-from linkage_functions import *
+
+def print_mat(bmat,name):
+    print(name)
+    bs = constants.BLOCK_SIZE
+    nb = constants.N_BLOCK
+
+    resMat = np.zeros((bs*nb,bs*nb),dtype=constants.DATA_TYPE)+constants.DEL_VAL
+    for bi in range(0,nb):
+        for i in range(bi,nb):
+            tmpinds = np.arange(i*bs,(i+1)*bs) 
+            bmat[bi, i].open()
+            resMat[bi*bs:(bi+1)*bs,tmpinds] = bmat[bi,i][:]
+            bmat[bi, i].close()
+    print(resMat)
+    n=constants.N_NODE        
+#    print(resMat[:n-1,1:n])
+
+def update_blocks_rowinsertion(bmat, editpool, bi):
+    insRowInd = editpool.insertRowInd
+    for  bk in range(bi,constants.N_BLOCK):
+        if not editpool.editFlag[bk]:
+            continue
+        editpool.sort_edit(bk)
+        for ri in range(0,constants.BLOCK_SIZE):
+            if ri==insRowInd:
+                for jj in range(0,editpool.rowEdit[bk].pointer[0]):
+                    tmpind = editpool.rowEdit[bk].index[0,jj]
+                    tmpval = editpool.rowEdit[bk].value[0,jj]
+                    bmat[bi,bk].open()
+                    bmat[bi,bk][insRowInd,tmpind]=tmpval
+                    bmat[bi,bk].close()
+            else:
+                for jj in range(0,editpool.normEdit[bk].pointer[ri]):
+                    tmpind=editpool.normEdit[bk].index[ri,jj]
+                    tmpval=editpool.normEdit[bk].value[ri,jj]
+                    bmat[bi,bk].open()
+                    bmat[bi,bk][ri,tmpind]=tmpval
+                    bmat[bi,bk].close()
+
+def update_blocks(bmat, editpool, bi):
+    for bk in range(bi,constants.N_BLOCK):
+        if not editpool.editFlag[bk]:
+            continue
+        editpool.sort_edit(bk)
+        for ri in range(0,constants.BLOCK_SIZE):  # ri: row index within the block
+            for jj in range(0,editpool.normEdit[bk].pointer[ri]):
+                tmpind=editpool.normEdit[bk].index[ri,jj]
+                tmpval=editpool.normEdit[bk].value[ri,jj]
+                bmat[bi,bk].open()
+                bmat[bi,bk][ri,tmpind]=tmpval
+                bmat[bi,bk].close()
+
+def gen_pointers3(distVec, nodeFlag, mi, rowind, beditPrev, beditNext):
+    # mi: index in the big matrix
+    valinds = mi+1+np.where(nodeFlag[mi+1:])[0]
+    print(valinds)
+    
+    if valinds.size==0:
+        hedInd = constants.DEL_VAL
+        hedVal = constants.DEL_VAL
+        return (hedInd, hedVal)
+    
+    idx = np.argsort(distVec[valinds])
+    idx = valinds[idx]
+    
+    beditPrev.insert_row_edit(rowind,idx[0],constants.HED_VAL)
+    for i in range(1,idx.size):
+        beditPrev.insert_row_edit(rowind,idx[i],idx[i-1])
+    
+    for i in range(0,idx.size-1):
+        beditNext.insert_row_edit(rowind,idx[i],idx[i+1])
+    beditNext.insert_row_edit(rowind,idx[-1],constants.END_VAL)
+    
+    hedInd = idx[0]
+    hedVal = distVec[idx[0]]
+    return (hedInd, hedVal)   
+
+def prepare_block_data(bdist,bprev,bnext,distMat,prevMat,nextMat,beditPrev,beditNext,blockFlag,bk):
+    get_mat_from_blocks(bdist,blockFlag,bk,distMat)
+    get_mat_from_blocks(bprev,blockFlag,bk,prevMat)
+    get_mat_from_blocks(bnext,blockFlag,bk,nextMat)
+    beditPrev.clear(bk)
+    beditNext.clear(bk)       
+
+def get_mat_from_blocks(bmat,blockFlag,bi,resMat):
+    bs = constants.BLOCK_SIZE
+    nb = constants.N_BLOCK
+
+    for i in range(bi,nb):
+        if not blockFlag[i]:
+            continue
+        tmpinds = np.arange(i*bs,(i+1)*bs) 
+        if blockFlag[i]:
+            bmat[bi, i].open()
+            resMat[:,tmpinds] = bmat[bi,i].read_all()
+            bmat[bi, i].close()
+
+# distribute resMat into "bi"th row of blocks
+def distribute_mat_to_blocks(resMat,blockFlag,bi,bmat):
+    bs = constants.BLOCK_SIZE  
+    nb = constants.N_BLOCK
+   
+    #for i in range(nb):
+    for i in range(bi,nb):
+        if not blockFlag[i]:
+            continue
+        tmpinds = np.arange(i*bs,(i+1)*bs)
+        bmat[bi,i].open()
+        bmat[bi,i].write_all(resMat[:,tmpinds])
+        bmat[bi,i].close()
+
+def del_pointers(distVec, prevVec, nextVec, hedInd, rowind, i, beditPrev, beditNext):
+    HV = constants.HED_VAL
+    EV = constants.END_VAL
+    DV = constants.DEL_VAL
+    
+    prevind = prevVec[i]
+    nextind = nextVec[i]
+    
+    hedVal = distVec[hedInd]
+    
+    # ith element is the single left element
+    if prevind==HV and nextind==EV:
+        hedInd=DV
+        hedVal=DV
+        prevVec[i]=DV
+        nextVec[i]=DV
+        
+        beditPrev.insert_edit_rep(rowind, i, DV)
+        beditNext.insert_edit_rep(rowind, i, DV) 
+        return (hedInd, hedVal)
+    
+    # remove ith element 
+    if prevind==HV:
+        hedInd=nextind
+        hedVal=distVec[hedInd]
+        prevVec[nextind]=prevind
+        beditPrev.insert_edit_rep(rowind,nextind,prevind)
+    elif nextind==EV:
+        nextVec[prevind]=nextind
+        beditNext.insert_edit_rep(rowind,prevind,nextind)
+    else:
+        prevVec[nextind]=prevind
+        nextVec[prevind]=nextind
+        beditPrev.insert_edit_rep(rowind,nextind,prevind)
+        beditNext.insert_edit_rep(rowind,prevind,nextind)
+    return (hedInd, hedVal)    
+
+def gen_pointers2(distVec, nodeFlag, mi, prevVec, nextVec):
+    # mi: index in the big matrix
+    valinds = mi+1+np.where(nodeFlag[mi+1:])[0]
+    
+    if valinds.size==0:
+        hedInd = constants.DEL_VAL
+        hedVal = constants.DEL_VAL
+        return (hedInd, hedVal)
+    
+    idx = np.argsort(distVec[valinds])
+    idx = valinds[idx]
+    
+    prevVec[idx[1:]] = idx[0:-1]
+    prevVec[idx[0]] = constants.HED_VAL
+    
+    nextVec[idx[:-1]] = idx[1:]
+    nextVec[idx[-1]] = constants.END_VAL
+    
+    hedInd = idx[0]
+    hedVal = distVec[idx[0]]
+    return (hedInd, hedVal)   
+
+def insert_pointers(distVec, prevVec, nextVec, hedInd, rowind, i, beditPrev, beditNext):
+    # insertion is only after deletions, so will not modify prevVec, nextVec anymore
+    HV = constants.HED_VAL
+    EV = constants.END_VAL
+    DV = constants.DEL_VAL
+    
+    targetVal=distVec[i]
+    curNodeInd=hedInd
+    
+    # in case all elements deleted, insert one new
+    if curNodeInd==DV:
+        hedInd=i
+        hedVal=targetVal
+        beditPrev.insert_edit_rep(rowind, i, HV)
+        beditNext.insert_edit_rep(rowind, i, EV)    
+        return (hedInd, hedVal)
+    
+    # insert in the head
+    if distVec[curNodeInd]>=targetVal:
+        hedInd=i
+        hedVal=targetVal
+        beditPrev.insert_edit_rep(rowind, i, HV)
+        beditNext.insert_edit_rep(rowind, i, curNodeInd)
+        beditPrev.insert_edit_rep(rowind, curNodeInd, i)
+        return (hedInd, hedVal)
+    
+    # insert in the middle or end
+    prevNodeInd=prevVec[curNodeInd]
+    while curNodeInd!=EV and distVec[curNodeInd]<targetVal:
+        prevNodeInd=curNodeInd
+        curNodeInd=nextVec[curNodeInd]
+    if curNodeInd==EV:
+        beditNext.insert_edit_rep(rowind, prevNodeInd, i)
+        beditNext.insert_edit_rep(rowind, i, EV)
+        beditPrev.insert_edit_rep(rowind, i, prevNodeInd)
+    else:
+        
+        beditNext.insert_edit_rep(rowind, prevNodeInd, i)
+        beditPrev.insert_edit_rep(rowind, curNodeInd, i)
+        
+        beditNext.insert_edit_rep(rowind, i, curNodeInd)
+        beditPrev.insert_edit_rep(rowind, i, prevNodeInd)
+    
+    hedVal=distVec[hedInd]    
+    return (hedInd, hedVal)
+
+def sort_ii_raw(ii, nodeFlag, hedIndmi, hedValmi, mi):
+    distMat = np.frombuffer(distMat_ptr, dtype=constants.DATA_TYPE).reshape(constants.BLOCK_SIZE, constants.BLOCK_SIZE*constants.N_BLOCK)
+    prevMat = np.frombuffer(prevMat_ptr, dtype=constants.DATA_TYPE).reshape(constants.BLOCK_SIZE, constants.BLOCK_SIZE*constants.N_BLOCK)
+    nextMat = np.frombuffer(nextMat_ptr, dtype=constants.DATA_TYPE).reshape(constants.BLOCK_SIZE, constants.BLOCK_SIZE*constants.N_BLOCK)
+    hedIndmi,hedValmi=gen_pointers2(distMat[ii,:], nodeFlag, mi, prevMat[ii,:], nextMat[ii,:])
+    return hedIndmi, hedValmi
+
+# rowind: row index with in the current block                            
+def del2ins1_raw(hedInd, rowind, ii, jj, beditPrev, beditNext):
+    distVec = np.frombuffer(distMat_ptr, dtype=constants.DATA_TYPE).reshape(constants.BLOCK_SIZE, constants.BLOCK_SIZE*constants.N_BLOCK)[rowind,:]
+    prevVec = np.frombuffer(prevMat_ptr, dtype=constants.DATA_TYPE).reshape(constants.BLOCK_SIZE, constants.BLOCK_SIZE*constants.N_BLOCK)[rowind,:]
+    nextVec = np.frombuffer(nextMat_ptr, dtype=constants.DATA_TYPE).reshape(constants.BLOCK_SIZE, constants.BLOCK_SIZE*constants.N_BLOCK)[rowind,:]
+    time.sleep(random.uniform(0,1))
+    hedInd,hedVal = del_pointers(distVec, prevVec, nextVec, hedInd, rowind, ii, beditPrev, beditNext)
+    hedInd,hedVal = del_pointers(distVec, prevVec, nextVec, hedInd, rowind, jj, beditPrev, beditNext)
+    hedInd,hedVal=insert_pointers(distVec, prevVec, nextVec, hedInd, rowind, ii, beditPrev, beditNext)        
+    return (hedInd,hedVal)    
+
+def del_pointers_raw(hedInd, rowind, i, beditPrev, beditNext):
+    distVec = np.frombuffer(distMat_ptr, dtype=constants.DATA_TYPE).reshape(constants.BLOCK_SIZE, constants.BLOCK_SIZE*constants.N_BLOCK)[rowind,:]
+    prevVec = np.frombuffer(prevMat_ptr, dtype=constants.DATA_TYPE).reshape(constants.BLOCK_SIZE, constants.BLOCK_SIZE*constants.N_BLOCK)[rowind,:]
+    nextVec = np.frombuffer(nextMat_ptr, dtype=constants.DATA_TYPE).reshape(constants.BLOCK_SIZE, constants.BLOCK_SIZE*constants.N_BLOCK)[rowind,:]    
+    time.sleep(random.uniform(0,1))
+
+    return del_pointers(distVec, prevVec, nextVec, hedInd, rowind, i, beditPrev, beditNext)
 
 def cal_dist_sub(xis, xie, diagonal_flag):
-    global dist_block_arr_ptr
+    # Contains globals; not easy to remove globals with multiprocess
+    # rawarrays must be global at least
+    global dist_block_arr_ptr, subXi, subXj
     t1 = time.time()
-    arr = np.frombuffer(dist_block_arr_ptr, dtype=constants.DATA_TYPE)
-    print("\t", time.time()-t1)
+    arr = np.frombuffer(dist_block_arr_ptr, dtype=constants.DATA_TYPE).reshape(constants.BLOCK_SIZE, constants.BLOCK_SIZE)
     for xi in range(xis, xie):
         start = diagonal_flag * xi
         for xj in range(start, constants.BLOCK_SIZE):
-            ai = xi*constants.BLOCK_SIZE+xj
-            arr[ai] = sum(np.not_equal(subXi[xi], subXj[xj]))
-    print("\t", time.time()-t1)
+            if xi < len(subXi) and xj < len(subXj):
+                arr[xi,xj] = sum(np.not_equal(subXi[xi], subXj[xj]))
 
 class LocalManager(BaseManager):
     pass
-
-#class ArrayProxy(NamespaceProxy):
-#    _exposed_ = ('__getattribute__', '__setattr__', '__delattr__', '__setitem__', '__getitem__')
-#    def __getitem__(self, item):
-#        return self._callmethod('__getitem__', (item,))
-#    def __setitem__(self, item, val):
-#        self._callmethod('__setitem__', (item,val,))
 
 class EditPoolProxy(NamespaceProxy):
     _exposed_ = ('__getattribute__', '__setattr__', '__delattr__', 'clear',
@@ -58,7 +293,8 @@ class Worker():
         beditNext = editPool()
         LocalManager.register('get_lbeditPrev', proxytype=EditPoolProxy, exposed=None, callable=lambda: beditPrev)
         LocalManager.register('get_lbeditNext', proxytype=EditPoolProxy, exposed=None, callable=lambda: beditNext)
-        self.nCores = cpu_count()
+#        self.nCores = cpu_count()
+        self.nCores = 1
 
         # Set up constants and local variables
         bs, nb = constants.BLOCK_SIZE, constants.N_BLOCK
@@ -73,9 +309,9 @@ class Worker():
         nextMat_ptr = RawArray(constants.CTYPE, bs*nb*bs)
         distMat_ptr = RawArray(constants.CTYPE, bs*nb*bs)
 
-#        self.prevMat = np.frombuffer(prevMat, dtype=constants.DATA_TYPE)
-#        self.nextMat = np.frombuffer(nextMat, dtype=constants.DATA_TYPE)
-#        self.distMat = np.frombuffer(distMat_ptr, dtype=constants.DATA_TYPE)
+        self.prevMat = np.frombuffer(prevMat_ptr, dtype=constants.DATA_TYPE).reshape(constants.BLOCK_SIZE, constants.BLOCK_SIZE*constants.N_BLOCK)
+        self.nextMat = np.frombuffer(nextMat_ptr, dtype=constants.DATA_TYPE).reshape(constants.BLOCK_SIZE, constants.BLOCK_SIZE*constants.N_BLOCK)
+        self.distMat = np.frombuffer(distMat_ptr, dtype=constants.DATA_TYPE).reshape(constants.BLOCK_SIZE, constants.BLOCK_SIZE*constants.N_BLOCK)
 
 #        LocalManager.register('get_lprevMat', proxytype=ArrayProxy, exposed=None, callable=lambda: prevMat)
 #        LocalManager.register('get_lnextMat', proxytype=ArrayProxy, exposed=None, callable=lambda: nextMat)
@@ -120,7 +356,6 @@ class Worker():
             self.blockCount[-1]=constants.N_NODE%constants.BLOCK_SIZE
 
     def cal_dist(self, bi, bj):
-        t1 = time.time()
         """ 
         Takes a block index bi, bj
         Calculates the pairwise distances for the block
@@ -131,28 +366,22 @@ class Worker():
         subXi = np.load("%s/%d.npy" % (constants.DATA_FOLDER, bi))
         subXj = np.load("%s/%d.npy" % (constants.DATA_FOLDER, bj))
         global dist_block_arr_ptr
+        assert len(subXi) <= constants.BLOCK_SIZE
+        assert len(subXj) <= constants.BLOCK_SIZE
         dist_block_arr_ptr = RawArray(constants.CTYPE, constants.BLOCK_SIZE*constants.BLOCK_SIZE)
         core_subset_size = int(math.ceil(constants.BLOCK_SIZE/self.nCores))
         diagonal_flag = (bi == bj)
-        tmpargs = [(i*core_subset_size, (i+1)*core_subset_size, diagonal_flag) for i in range(self.nCores-1)]
-        lastarg = ((self.nCores-1)*core_subset_size, len(subXi), diagonal_flag)
-        tmpargs.append(lastarg)
-        print(time.time()-t1)
+        tmpargs = [(i*core_subset_size, (i+1)*core_subset_size, diagonal_flag) for i in range(self.nCores)]
         with multiprocessing.Pool(processes=self.nCores) as pool:
             results = pool.starmap(cal_dist_sub, tmpargs)            
 
-
-        print(time.time()-t1)
         # Write the result
         dist_block_arr = np.frombuffer(dist_block_arr_ptr, dtype=constants.DATA_TYPE).reshape((constants.BLOCK_SIZE, constants.BLOCK_SIZE))
-#        print(bi, bj, dist_block_arr)
-        print(time.time()-t1)
         bfd = "%s/%d_d/%d_d.block" % (constants.BLOCK_FOLDER, bi, bj)
         dist_block = BlockFileMap(bfd, constants.DATA_TYPE, dist_block_arr.shape)
         dist_block.open()
         dist_block.write_all(dist_block_arr)
         dist_block.close()
-        print(time.time()-t1)
         return bi, bj
 
 
@@ -167,7 +396,6 @@ class Worker():
         print("updating blockflag", bjj)
         self.blockCount[bjj] -= 1
         self.blockFlag[bjj] = self.blockCount[bjj]>0
-
 
     def sort_rows(self, bi):
         """
@@ -187,14 +415,14 @@ class Worker():
                 tmpargs.append((ii, self.nodeFlag, self.hedInd[mi], self.hedVal[mi], mi))
 
         with multiprocessing.Pool(processes=self.nCores) as pool:
-            results = pool.starmap(sort_ii, tmpargs)
+            results = pool.starmap(sort_ii_raw, tmpargs)
 
         for ii in range(0, constants.BLOCK_SIZE):
     #            sort_ii2(self.distMat, self.prevMat, self.nextMat, self.nodeFlag, self.hedInd, self.hedVal, bi, ii)
             mi = constants.BLOCK_SIZE*bi+ii
             if mi<constants.N_NODE-1:
                 result = results[ii]
-                self.prevMat[ii,], self.nextMat[ii,], self.hedInd[mi], self.hedVal[mi] = result
+                self.hedInd[mi], self.hedVal[mi] = result
 
         distribute_mat_to_blocks(self.prevMat,self.blockFlag,bi,self.bprev)
         distribute_mat_to_blocks(self.nextMat,self.blockFlag,bi,self.bnext)
@@ -212,6 +440,9 @@ class Worker():
 #        self.distMat = lManager.get_ldistMat()
 #        self.beditPrev = lManager.get_lbeditPrev()
 #        self.beditNext = lManager.get_lbeditNext()
+        print_mat(self.bdist,'dist')
+        print_mat(self.bprev,'prev')
+        print_mat(self.bnext,'next')
 
         [bii, iii] = constants.getbi(ii);
         [bjj, jjj] = constants.getbi(jj);
@@ -226,46 +457,56 @@ class Worker():
             self.hedInd[bkl:] = subHedInd
             self.hedVal[bkl:] = subHedVal            
         
-        # bk < bii faster?
         if bk in range(0,bii):
+            print("case 1", bk)
+            t1 = time.time()
             prepare_block_data(self.bdist,self.bprev,self.bnext,self.distMat,
                                self.prevMat,self.nextMat,self.beditPrev,
                                self.beditNext,self.blockFlag,bk)
 
             # Parallelize: moving to ctypes will be faster
             # Copying row costs especially 
+            print(self.distMat)
+            print(self.prevMat)
+            print(self.nextMat)
             tmpargs = []
             for kk in range(0,constants.BLOCK_SIZE):
                 mk = constants.getmi(bk,kk)
                 if self.nodeFlag[mk]:
-                    tmpargs.append((self.distMat[kk,:], self.prevMat[kk,:],
-                                                             self.nextMat[kk,:], self.hedInd[mk], 
-                                                             kk, ii, jj, self.beditPrev, self.beditNext))
-
-#                    self.hedInd[mk],self.hedVal[mk]=del2ins1(self.distMat[kk,:], self.prevMat[kk,:],
-#                                                             self.nextMat[kk,:], self.hedInd[mk], 
-#                                                             kk, ii, jj, self.beditPrev, self.beditNext)
-#                    self.hedInd[mk],self.hedVal[mk]=del2ins1_local(self.hedInd[mk], kk, ii, jj)
+                    tmpargs.append((self.hedInd[mk], kk, ii, jj, self.beditPrev, self.beditNext))
+            t2 = time.time()
 
             with multiprocessing.Pool(processes=self.nCores) as pool:
-                results = pool.starmap(del2ins1, tmpargs)
+                results = pool.starmap(del2ins1_raw, tmpargs)
 
+            t4 = time.time()
             ri = 0
             for kk in range(0,constants.BLOCK_SIZE):
                 mk = constants.getmi(bk,kk)
                 if self.nodeFlag[mk]:
                     self.hedInd[mk], self.hedVal[mk] = results[ri]
                     ri += 1
+            t5 = time.time()
+
+            print(self.distMat)
+            print(self.prevMat)
+            print(self.nextMat)
 
             update_blocks(self.bprev, self.beditPrev, bk)
             update_blocks(self.bnext, self.beditNext, bk)    
+            t6 = time.time()
+            print("times", t6-t5, t5-t4, t4-t2, t2-t1)
 
-        # bk == bii faster?
         elif bk in range(bii,bii+1):
+            print("case 2", bk)
             prepare_block_data(self.bdist,self.bprev,self.bnext,self.distMat,self.prevMat,
                                self.nextMat,self.beditPrev,self.beditNext,self.blockFlag,bk)
 
             # Parallelize
+            print(self.distMat)
+            print(self.prevMat)
+            print(self.nextMat)
+
             tmpargs = []
             for kk in range(0,iii):
                 mk = constants.getmi(bk,kk)
@@ -273,13 +514,15 @@ class Worker():
 #                    self.hedInd[mk],self.hedVal[mk]=del2ins1(self.distMat[kk,:], self.prevMat[kk,:],
 #                                                             self.nextMat[kk,:], self.hedInd[mk], 
 #                                                             kk, ii, jj, self.beditPrev, self.beditNext)
-                    tmpargs.append((self.distMat[kk,:], self.prevMat[kk,:],
-                                                             self.nextMat[kk,:], self.hedInd[mk], 
-                                                             kk, ii, jj, self.beditPrev, self.beditNext))
+                    tmpargs.append((self.hedInd[mk], kk, ii, jj, self.beditPrev, self.beditNext))
+#                    tmpargs.append((self.distMat[kk,:], self.prevMat[kk,:],
+#                                                             self.nextMat[kk,:], self.hedInd[mk], 
+#                                                             kk, ii, jj, self.beditPrev, self.beditNext))
+
 
 
             with multiprocessing.Pool(processes=self.nCores) as pool:
-                results = pool.starmap(del2ins1, tmpargs)
+                results = pool.starmap(del2ins1_raw, tmpargs)
 
             ri = 0
             for kk in range(0,iii):
@@ -306,13 +549,15 @@ class Worker():
 #                    self.hedInd[mk],self.hedVal[mk] = del_pointers(self.distMat[kk,:], self.prevMat[kk,:],
 #                                                                   self.nextMat[kk,:], self.hedInd[mk],
 #                                                                   kk, jj, self.beditPrev, self.beditNext)
-                    tmpargs.append((self.distMat[kk,:], self.prevMat[kk,:],
-                                                                   self.nextMat[kk,:], self.hedInd[mk],
-                                                                   kk, jj, self.beditPrev, self.beditNext))
+#                    tmpargs.append((self.distMat[kk,:], self.prevMat[kk,:],
+#                                                                   self.nextMat[kk,:], self.hedInd[mk],
+#                                                                   kk, jj, self.beditPrev, self.beditNext))
+                    tmpargs.append((self.hedInd[mk], kk, jj, self.beditPrev, self.beditNext))
+
 
 
             with multiprocessing.Pool(processes=self.nCores) as pool:
-                results = pool.starmap(del_pointers, tmpargs)
+                results = pool.starmap(del_pointers_raw, tmpargs)
 
             ri = 0
             for kk in range(iii+1,endRowInd):
@@ -321,12 +566,21 @@ class Worker():
                     self.hedInd[mk], self.hedVal[mk] = results[ri]
                     ri += 1
 
+            print(self.distMat)
+            print(self.prevMat)
+            print(self.nextMat)
+
             update_blocks_rowinsertion(self.bprev, self.beditPrev, bk)
             update_blocks_rowinsertion(self.bnext, self.beditNext, bk)
 
         elif bk in range(bii+1,bjj+1):
+            print("case 3", bk)
             prepare_block_data(self.bdist,self.bprev,self.bnext,self.distMat,self.prevMat,self.nextMat,
                                self.beditPrev,self.beditNext,self.blockFlag,bk)
+            print(self.distMat)
+            print(self.prevMat)
+            print(self.nextMat)
+
 
             if bk==bjj:
                 # jjj is the boundary; we hit the bottom row
@@ -338,15 +592,11 @@ class Worker():
             for kk in range(0,endRowInd):
                 mk = constants.getmi(bk,kk)
                 if self.nodeFlag[mk]:
-#                    self.hedInd[mk],self.hedVal[mk] = del_pointers(self.distMat[kk,:], self.prevMat[kk,:],
-#                                                                   self.nextMat[kk,:], self.hedInd[mk],
-#                                                                   kk, jj, self.beditPrev, self.beditNext)
-                    tmpargs.append((self.distMat[kk,:], self.prevMat[kk,:],
-                                                                   self.nextMat[kk,:], self.hedInd[mk],
-                                                                   kk, jj, self.beditPrev, self.beditNext))
+                    tmpargs.append((self.hedInd[mk], kk, jj, self.beditPrev, self.beditNext))
+
 
             with multiprocessing.Pool(processes=self.nCores) as pool:
-                results = pool.starmap(del_pointers, tmpargs)
+                results = pool.starmap(del_pointers_raw, tmpargs)
 
             ri = 0
             for kk in range(0,endRowInd):
@@ -355,10 +605,20 @@ class Worker():
                     self.hedInd[mk], self.hedVal[mk] = results[ri]
                     ri += 1
 
+            print(self.distMat)
+            print(self.prevMat)
+            print(self.nextMat)
+
             update_blocks(self.bprev, self.beditPrev, bk)
             update_blocks(self.bnext, self.beditNext, bk)     
+        print(self.nodeFlag)
+        print("RESPONSIBLE FOR", bkl, bkr)
+        print("RETURNING", self.hedInd[bkl:bkr], self.hedVal[bkl:bkr])
 
         if bkr < len(self.hedInd):
+            for hi in self.hedInd[bkl:bkr]:
+                if hi != constants.DEL_VAL:
+                    assert self.nodeFlag[hi]
             return bk, self.hedInd[bkl:bkr], self.hedVal[bkl:bkr]
         else:
             return bk, self.hedInd[bkl:], self.hedVal[bkl:]
