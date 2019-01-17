@@ -138,7 +138,7 @@ class GlobalServer():
         self.worker_ids = sorted(list(self.workers.get_worker_ids()))
 
     def update_workers(self, updateName, *params):
-        print("Server updating workers", updateName)
+        print("Server updating workers")
         for wid in self.worker_ids:
             self.globalUpdateMap.put(wid, updateName, *params)
         print("Server done updating")
@@ -183,8 +183,8 @@ def split_and_write_data(X, data_folder, nb, bs):
         fn =  "%s/%d.npy" % (data_folder, b)
         np.save(fn, X[bi:bi+bs])
 
-def linkage_block(X, block_directory, data_folder, n_workers, shutdowns=10):
-    times = [0,0,0,0,0]
+def linkage_block(X, data_folder, block_directory, n_workers, shutdowns=10):
+#    times = [0,0,0,0,0]
     # Establish server
     serv = GlobalServer(n_workers)
 
@@ -253,10 +253,10 @@ def linkage_block(X, block_directory, data_folder, n_workers, shutdowns=10):
     treeNodeArr=np.arange(constants.N_NODE,dtype=constants.DATA_TYPE)
     Z = np.zeros((constants.N_NODE-1,3), dtype='float')        
     for iStep in range(constants.N_NODE-1):
-        t1 = time.time()
+#        t1 = time.time()
         # First find ii, jj to be merged
-        print(hedInd)
-        print(hedVal)
+#        print(hedInd)
+#        print(hedVal)
         minind, minval = constants.mymin(hedVal) 
         ii = minind
         jj = hedInd[ii] 
@@ -280,7 +280,7 @@ def linkage_block(X, block_directory, data_folder, n_workers, shutdowns=10):
         [bii, iii] = constants.getbi(ii);
         [bjj, jjj] = constants.getbi(jj);    
 
-        t2 = time.time()
+#        t2 = time.time()
 
         # Compute each row in parallel
         for bk in range(0, bjj+1):
@@ -292,10 +292,10 @@ def linkage_block(X, block_directory, data_folder, n_workers, shutdowns=10):
                 serv.submit_task("recalc_blocks", bk, ii, jj, hedInd[bkl:], hedVal[bkl:])
         print("collecting...")
         res = serv.collect()
-        t3 = time.time()
+#        t3 = time.time()
 #        print("result", res)
         for bi, subHedInd, subHedVal in res:
-            print("\t", bi, subHedInd, subHedVal)
+#            print("\t", bi, subHedInd, subHedVal)
             mil = bi * constants.BLOCK_SIZE
             mir = (bi+1) * constants.BLOCK_SIZE
             if mir < len(hedInd):
@@ -304,33 +304,33 @@ def linkage_block(X, block_directory, data_folder, n_workers, shutdowns=10):
             else:
                 hedInd[mil:] = subHedInd
                 hedVal[mil:] = subHedVal
-        t4 = time.time()
+#        t4 = time.time()
         # Update the workers
         serv.update_workers("update_nodeflag", jj)
         serv.collect_updates()
         serv.update_workers("update_blockflag", bjj)
         serv.collect_updates()
-        t5 = time.time()
+#        t5 = time.time()
 
         # Update the flags here too
         nodeFlag[jj]=False
         if jj<constants.N_NODE-1:
-            print(jj)
+#            print(jj)
             hedInd[jj]=constants.DEL_VAL
             hedVal[jj]=constants.DEL_VAL
 
         blockCount[bjj] -= 1
         blockFlag[bjj] = blockCount[bjj]>0
-        t6 = time.time()
-        times[0] += t2-t1
-        times[1] += t3-t2
-        times[2] += t4-t3
-        times[3] += t5-t4
-        times[4] += t6-t5
-        print()
+#        t6 = time.time()
+#        times[0] += t2-t1
+#        times[1] += t3-t2
+#        times[2] += t4-t3
+#        times[3] += t5-t4
+#        times[4] += t6-t5
+#        print()
 
-    print("times")
-    print(times)
+#    print("times")
+#    print(times)
     return Z
 
 if __name__ == "__main__":

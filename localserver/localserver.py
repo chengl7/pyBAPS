@@ -15,7 +15,10 @@ class LocalServer():
     Handles requests
     Calls requested functions
     """
-    def __init__(self, n, d, worker_id):
+    def __init__(self, n, d, worker_id, data_dir, block_dir):
+        assert n > 1
+        assert d > 1
+        constants.init(n,d, data_dir, block_dir)
         # Get worker identity 
         self.worker_id = worker_id
 
@@ -26,14 +29,22 @@ class LocalServer():
         QueueManager.register('get_workers')
 
         # Connect to server
-        server_addr=socket.gethostname()
-        nodename=socket.gethostname()
-        time.sleep(1) # wait for the server to set up
-        gPort=5000
-        gKey=b'baps'
-        print('%s Connect to server %s...' % (nodename,server_addr))
-        gManager = QueueManager(address=(server_addr, gPort), authkey=gKey)
-        gManager.connect()
+        connected = False
+        while connected == False:
+            try:
+                server_addr=socket.gethostname()
+                nodename=socket.gethostname()
+                time.sleep(1) # wait for the server to set up
+                gPort=5000
+                gKey=b'baps'
+                print('%s Connect to server %s...' % (nodename,server_addr))
+                gManager = QueueManager(address=(server_addr, gPort), authkey=gKey)
+                gManager.connect()
+                connected = True
+            except ConnectionRefusedError:
+                print("Connection refused... retrying")
+                time.sleep(3)
+                    
 
         # Get queues
         self.globalTaskQueue = gManager.get_gtask_queue()
@@ -50,7 +61,7 @@ class LocalServer():
 
     def update(self, tqe):
         print()
-        print("Worker updating!", tqe)
+        print("Worker updating!")
         funcname = tqe[0]
         para = tqe[1:]
         func = getattr(self.coreworker,funcname)
@@ -63,24 +74,28 @@ class LocalServer():
         resQueue: queue to put result
         '''
         print()
-        print("Worker running task!", tqe)
+        print("Worker running task!")
 
         funcname = tqe[0]
         index = tqe[1]
         para = tqe[2:]
-        print(funcname, para)       
+#        print(funcname, para)       
         func = getattr(self.coreworker,funcname)
         res = func(*para)
-        print("finished task, returning", res)        
+        print("finished task, returning")        
         return [res]
 
     def listen(self):
         print("Listening", self.shutdown)
         while not self.shutdown:
             # Try to update with priority
-            up = self.globalUpdateMap.get(self.worker_id)
+            try:
+                up = self.globalUpdateMap.get(self.worker_id)
+            except EOFError:
+                print("EOF error, shutting down")
+                self.shutdown = True
             if up:
-                print("got an update", up)
+                print("got an update")
                 res = self.update(up)
                 self.globalUpdateMap.reply(self.worker_id, res)
             else:

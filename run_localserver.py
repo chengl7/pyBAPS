@@ -11,5 +11,4 @@ parser.add_argument("-data_dir", type=str, help="Partitioned data directory")
 args = parser.parse_args()
 print(args)
 
-constants.init(args.n, args.d, args.data_dir, args.block_dir)
-ls = LocalServer(args.n, args.d, args.localserver_id)
+ls = LocalServer(args.n, args.d, args.localserver_id, args.data_dir, args.block_dir)
