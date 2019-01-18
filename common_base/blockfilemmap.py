@@ -43,7 +43,7 @@ class BlockFileMap():
 
     def _umap(self):
         """ Flush changes to file, remove """
-        self.mmap.flush()
+#        self.mmap.flush()
         del self.mmap
 
     def _read_all(self):
