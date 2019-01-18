@@ -15,10 +15,10 @@ class LocalServer():
     Handles requests
     Calls requested functions
     """
-    def __init__(self, n, d, worker_id, data_dir, block_dir):
+    def __init__(self, n, d, worker_id, data_dir, block_dir, n_blocks):
         assert n > 1
         assert d > 1
-        constants.init(n,d, data_dir, block_dir)
+        constants.init(n,d, data_dir, block_dir, n_blocks)
         # Get worker identity 
         self.worker_id = worker_id
 

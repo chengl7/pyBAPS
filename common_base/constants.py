@@ -20,9 +20,10 @@ class constants:
     CTYPE = None
 
     @classmethod
-    def init(cls, n, xlen, data_folder, block_folder):
+    def init(cls, n, xlen, data_folder, block_folder, n_block):
         cls.N_NODE = n
-        cls.N_BLOCK = ceil(sqrt(n))
+#        cls.N_BLOCK = ceil(sqrt(n))
+        cls.N_BLOCK = n_block
         cls.BLOCK_SIZE = ceil(n/cls.N_BLOCK)
         if n % cls.BLOCK_SIZE > 0:
             cls.LAST_BLOCK_SIZE = n % cls.BLOCK_SIZE

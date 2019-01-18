@@ -183,7 +183,7 @@ def split_and_write_data(X, data_folder, nb, bs):
         fn =  "%s/%d.npy" % (data_folder, b)
         np.save(fn, X[bi:bi+bs])
 
-def linkage_block(X, data_folder, block_directory, n_workers, shutdowns=10):
+def linkage_block(X, data_folder, block_directory, n_workers, n_blocks):
 #    times = [0,0,0,0,0]
     # Establish server
     serv = GlobalServer(n_workers)
@@ -191,7 +191,7 @@ def linkage_block(X, data_folder, block_directory, n_workers, shutdowns=10):
     # Prepare data
     n,d=X.shape
     print(n,d,n_workers)
-    constants.init(n,d, data_folder, block_directory)
+    constants.init(n,d, data_folder, block_directory, n_blocks)
     init_files(block_directory, constants.N_BLOCK)
     hedInd = np.zeros(n-1,dtype=constants.DATA_TYPE)
     hedVal = np.zeros(n-1,dtype=constants.DATA_TYPE) 
