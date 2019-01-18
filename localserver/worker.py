@@ -104,7 +104,7 @@ def get_mat_from_blocks(bmat,blockFlag,bi,resMat):
         if blockFlag[i]:
             bmat[bi, i].open()
             resMat[:,tmpinds] = bmat[bi,i].read_all()
-            bmat[bi, i].close()
+#            bmat[bi, i].close()
 
 # distribute resMat into "bi"th row of blocks
 def distribute_mat_to_blocks(resMat,blockFlag,bi,bmat):
