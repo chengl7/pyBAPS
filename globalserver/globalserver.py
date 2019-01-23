@@ -4,6 +4,7 @@ import numpy as np
 from multiprocessing.managers import BaseManager
 from queue import Queue
 from common_base import *
+funcList.init()
 
 class WorkerList():
     def __init__(self):
@@ -229,7 +230,7 @@ def linkage_block(X, data_folder, block_directory, n_workers, n_blocks):
     for bi in range(0,constants.N_BLOCK):
         for bj in range(bi,constants.N_BLOCK):
         # Init dist block
-            serv.submit_task("cal_dist", bi, bj)
+            serv.submit_task(funcList.get_func_ind("cal_dist"), bi, bj)
     serv.collect()
 
     # Task 2: Sort block rows in parallel
@@ -237,7 +238,7 @@ def linkage_block(X, data_folder, block_directory, n_workers, n_blocks):
     bs = constants.BLOCK_SIZE
 
     for bi in range(0, constants.N_BLOCK):
-        serv.submit_task("sort_rows", bi)
+        serv.submit_task(funcList.get_func_ind("sort_rows"), bi)
     res = serv.collect()
     for bi, subHedInd, subHedVal in res:
         mil = bi * constants.BLOCK_SIZE
@@ -287,9 +288,9 @@ def linkage_block(X, data_folder, block_directory, n_workers, n_blocks):
             bkl = bk * constants.BLOCK_SIZE
             bkr = (bk+1) * constants.BLOCK_SIZE
             if bkr < len(hedInd):
-                serv.submit_task("recalc_blocks", bk, ii, jj, hedInd[bkl:bkr], hedVal[bkl:bkr])
+                serv.submit_task(funcList.get_func_ind("recalc_blocks"), bk, ii, jj, hedInd[bkl:bkr], hedVal[bkl:bkr])
             else:
-                serv.submit_task("recalc_blocks", bk, ii, jj, hedInd[bkl:], hedVal[bkl:])
+                serv.submit_task(funcList.get_func_ind("recalc_blocks"), bk, ii, jj, hedInd[bkl:], hedVal[bkl:])
         print("collecting...")
         res = serv.collect()
 #        t3 = time.time()
@@ -306,9 +307,9 @@ def linkage_block(X, data_folder, block_directory, n_workers, n_blocks):
                 hedVal[mil:] = subHedVal
 #        t4 = time.time()
         # Update the workers
-        serv.update_workers("update_nodeflag", jj)
+        serv.update_workers(funcList.get_func_ind("update_nodeflag"), jj)
         serv.collect_updates()
-        serv.update_workers("update_blockflag", bjj)
+        serv.update_workers(funcList.get_func_ind("update_blockflag"), bjj)
         serv.collect_updates()
 #        t5 = time.time()
 
@@ -333,20 +334,8 @@ def linkage_block(X, data_folder, block_directory, n_workers, n_blocks):
 #    print(times)
     return Z
 
-if __name__ == "__main__":
-    import sys
-    import argparse
-    n_workers, n, d = map(int, sys.argv[1:])
-    constants.init(n,d,'test_data', 'test_block_files')
-    parser = argparse.ArgumentParser(description="")
-    bs = GlobalServer(n_workers)
-    Z = linkage_block()
-    bs.submit_task("f",10,1)
-    print("SUBMITTED, COLLECTING")
-    bs.collect()
-    print("NEXT")
-    time.sleep(10)
-    bs.submit_task("f",10, 1)
-    bs.collect()
-    print("FINISHED")
+def main(fasta_fname, data_folder, block_directory, n_workers, n_blocks):
+    import parsers as ps
+    headers, X = ps.read_fasta(fasta_fname)
+    linkage_block(X, data_folder, block_directory, n_workers, n_blocks)
     

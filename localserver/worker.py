@@ -434,14 +434,6 @@ class Worker():
 
 
     def recalc_blocks(self, bk, ii, jj, subHedInd, subHedVal):
-#        self.prevMat = lManager.get_lprevMat()
-#        self.nextMat = lManager.get_lnextMat()
-#        self.distMat = lManager.get_ldistMat()
-#        self.beditPrev = lManager.get_lbeditPrev()
-#        self.beditNext = lManager.get_lbeditNext()
-#        print_mat(self.bdist,'dist')
-#        print_mat(self.bprev,'prev')
-#        print_mat(self.bnext,'next')
 
         [bii, iii] = constants.getbi(ii);
         [bjj, jjj] = constants.getbi(jj);

@@ -39,4 +39,4 @@ def read_fasta(fasta_name):
         headers.append(hed)
         seq_aln[i:]=seq_int
 
-    eturn headers,seq_aln
+    return headers,seq_aln
