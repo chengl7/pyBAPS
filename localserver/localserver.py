@@ -3,6 +3,8 @@ import numpy as np
 from multiprocessing.managers import BaseManager
 from common_base import UpdateMap
 from common_base import constants
+from common_base import funcList
+funcList.init()
 from localserver.worker import *
 
 class QueueManager(BaseManager):
@@ -15,7 +17,7 @@ class LocalServer():
     Handles requests
     Calls requested functions
     """
-    def __init__(self, n, d, worker_id, data_dir, block_dir, n_blocks):
+    def __init__(self, server_addr, n, d, worker_id, data_dir, block_dir, n_blocks):
         assert n > 1
         assert d > 1
         constants.init(n,d, data_dir, block_dir, n_blocks)
@@ -32,7 +34,7 @@ class LocalServer():
         connected = False
         while connected == False:
             try:
-                server_addr=socket.gethostname()
+#                server_addr=socket.gethostname()
                 nodename=socket.gethostname()
                 time.sleep(1) # wait for the server to set up
                 gPort=5000
@@ -62,7 +64,7 @@ class LocalServer():
     def update(self, tqe):
         print()
         print("Worker updating!")
-        funcname = tqe[0]
+        funcname = funcList.get_func_name(tqe[0])
         para = tqe[1:]
         func = getattr(self.coreworker,funcname)
         res = func(*para)
@@ -76,7 +78,7 @@ class LocalServer():
         print()
         print("Worker running task!")
 
-        funcname = tqe[0]
+        funcname = funcList.get_func_name(tqe[0])
         index = tqe[1]
         para = tqe[2:]
 #        print(funcname, para)       
@@ -94,8 +96,8 @@ class LocalServer():
             except EOFError:
                 print("EOF error, shutting down")
                 self.shutdown = True
-            if up:
-                print("got an update")
+            if up != None:
+                print("got an update", up)
                 res = self.update(up)
                 self.globalUpdateMap.reply(self.worker_id, res)
             else:
@@ -103,8 +105,9 @@ class LocalServer():
                     mytask = self.globalTaskQueue.get(block=True, timeout=0)
                 except:
                     # Queue is empty, mytask is none, look for updates instead
-                    mytask = False
-                if mytask:
+                    # Must use -1, since some task ids are 0 (false)
+                    mytask = -1
+                if mytask != -1:
                     print("got a task")
                     res = self.run_task(mytask)
                     for x in res:

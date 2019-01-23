@@ -3,35 +3,40 @@ from multiprocessing import Process
 from multiprocessing import Pool
 
 import globalserver as gs
-import linkage_block_mmap as lbm
+import tests.linkage_block_mmap as lbm
 import common_base
 import localserver as ls
 
 from itertools import product
 from scipy.cluster.hierarchy import linkage
 from scipy.spatial.distance import hamming
-from mylinke_single_euclidean import mylinkage
+from tests.mylinke_single_euclidean import mylinkage
 import time
 import sys
 
-def run_localserver(n, d, ls_id, df, bf):
-    ls.LocalServer(n,d,ls_id,df,bf)
+import socket
 
-#n, d = map(int, sys.argv[2:4])
-for i in range(10):
+def run_localserver(addr, n, d, ls_id, df, bf, nb):
+    ls.LocalServer(addr, n,d,ls_id,df,bf,nb)
+
+
+def test_all_iterations(n, d):
+    #n, d = map(int, sys.argv[2:4])
 
     # test with hamming distance,the setting can easily lead to distance ties, 
-    n=np.random.randint(100,200)
-    d=np.random.randint(5000,10000)
-    X=np.random.randint(0,2,(n,d),dtype='uint8')
+#    n=np.random.randint(300,400)
+#    d=np.random.randint(5000,10000)
+    X=np.random.randint(0,4,(n,d),dtype='uint8')
     print(n,d)
 
     disttime = time.time()
     n_workers = 1
+    n_blocks = 1
     p = Pool(1)
-    p = Process(target=run_localserver, args=(n, d, 0, 'tests/test_data', 'tests/test_block_files'))
+    hostname = socket.gethostname()
+    p = Process(target=run_localserver, args=(hostname, n, d, 0, 'tests/test_data', 'tests/test_block_files', n_blocks))
     p.start()
-    Z = gs.linkage_block(X,'tests/test_data', 'tests/test_block_files', n_workers)
+    Z = gs.linkage_block(X,'tests/test_data', 'tests/test_block_files', n_workers, n_blocks)
     disttime = time.time()-disttime
 
 
