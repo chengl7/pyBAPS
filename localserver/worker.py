@@ -294,6 +294,7 @@ class Worker():
         LocalManager.register('get_lbeditPrev', proxytype=EditPoolProxy, exposed=None, callable=lambda: beditPrev)
         LocalManager.register('get_lbeditNext', proxytype=EditPoolProxy, exposed=None, callable=lambda: beditNext)
         self.nCores = cpu_count()
+        print("Launched worker with", self.nCores, "cores")
 
         # Set up constants and local variables
         bs, nb = constants.BLOCK_SIZE, constants.N_BLOCK
