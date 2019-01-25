@@ -93,8 +93,9 @@ class LocalServer():
             # Try to update with priority
             try:
                 up = self.globalUpdateMap.get(self.worker_id)
-            except EOFError:
-                print("EOF error, shutting down")
+            except (EOFError, ConnectionResetError) as e:
+                print(e)
+                print("shutting down")
                 self.shutdown = True
             if up != None:
                 print("got an update", up)
