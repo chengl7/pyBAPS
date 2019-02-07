@@ -13,6 +13,25 @@ class TreeNode:
         self.bleft = 0
         self.bmid = 0
         self.bright = 0
+        self.depth = 0
+        
+#    def __iter__(self):
+#        #print(f'id={self.id}')
+#        if self.leftChild:
+#            print('-',end='')
+#            yield from self.leftChild
+#        yield self
+#        if self.rightChild:
+#            print('-',end='')
+#            yield from self.rightChild
+#     
+#    def __next__(self):
+#        if self is None:
+#            raise StopIteration
+#        else:
+#            print(f'id={self.id}')
+             
+    
         
 def build_tree(Z, n):
     tmplist = []
@@ -31,6 +50,7 @@ def build_tree(Z, n):
     arr = np.arange(n)
     idxarr = np.arange(n)
     set_boarder(currNode, arr, idxarr, 0, n)
+    set_depth(currNode,0)
     return currNode
 
 def get_node(inode, n, innerList):
@@ -62,7 +82,41 @@ def bin_search(mylist,inode):
         elif inode < item:
             last = mid
         else:
-            first = mid    
+            first = mid  
+            
+def set_depth(root,depth):
+    if root:
+        root.depth = depth
+        set_depth(root.leftChild, depth+1)
+        set_depth(root.rightChild, depth+1)
+        return root
+
+def leaf_generator(root):
+    if root.leftChild is None or root.rightChild is None:
+        yield root
+    if root.leftChild:
+        yield from leaf_generator(root.leftChild)
+    if root.rightChild:
+        yield from leaf_generator(root.rightChild)
+    
+        
+def inner_generator(root):
+    if root.leftChild is None and root.rightChild is None:
+        return root
+    else:
+        yield root
+    if root.leftChild:
+        yield from inner_generator(root.leftChild)
+    if root.rightChild:
+        yield from inner_generator(root.rightChild)   
+        
+def disp_tree(root):
+    print('  '*root.depth+'-',end='')
+    print(root.id)
+    if root.leftChild:
+        disp_tree(root.leftChild)
+    if root.rightChild:
+        disp_tree(root.rightChild)     
             
 def set_boarder(root, arr, idxarr, left, right):
     if root.leftChild is None or root.rightChild is None:
@@ -92,7 +146,7 @@ def subtree(root, subidx, arr):
     if len(subidx)==0:
         return None
     if len(subidx)==1:
-        return TreeNode(arr[subidx])
+        return TreeNode(int(arr[subidx]))
     
     flag = subidx<root.bmid
     leftIdx = subidx[flag]
@@ -105,6 +159,7 @@ def subtree(root, subidx, arr):
     else:
         retNode = TreeNode()
         retNode.height = root.height
+        retNode.id = root.id
         retNode.nLeafNode = len(subidx)
         
         if len(leftIdx)<=len(rightIdx):
@@ -126,6 +181,10 @@ x = np.random.randn(n,4)
 Z = linkage(x,'complete')
 r = build_tree(Z,n)
 
+disp_tree(r)
+
 subarr=[1,2,3,4]
 st = subtree(r,idxarr[subarr],arr)
+set_depth(st,0)
+disp_tree(st)
     
