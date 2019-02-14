@@ -274,15 +274,19 @@ class Constants:
         return X
 
 class Server(Process):
-    def __init__(self, parentAddress=None, authKey=None, serverAddress=None, serverName=None, nChild=0, childBlockList=[]):
+    def __init__(self, parentConn=None, parentAddress=None, authKey=None,
+                 serverAddress=None, serverName=None,
+                 nChild=0, childConns=[], childBlockList=[]):
         super().__init__(name=serverName)
         # connect to parent server
-        if parentAddress:
-            self.parentAddress = parentAddress
+        if parentConn:
+            self.parentConn = parentConn
+        elif parentAddress:
+#            self.parentAddress = parentAddress
             self.parentConn = Client(parentAddress, authkey=authKey)
             logger.info('connection to %s established.' % str(parentAddress))
         else:
-            self.parentAddress = None
+#            self.parentAddress = None
             self.parentConn = None
         
         self.blockFlag = np.ones(Constants.N_BLOCK, dtype=bool)
@@ -299,12 +303,15 @@ class Server(Process):
             
         # get connections from children
         self.nChild = nChild
-        self.childConns = list()
+        self.childConns = childConns
         self.childBlockList = childBlockList   # a list indicating the blocks for each child
-        for i in range(nChild):
-            conn = self.server.accept()
-            self.childConns.append(conn)
-            logger.info('Connection from %s established.' % (self.server.last_accepted[0]))
+        if childConns:
+            logger.info('Child connection is provided for %s.' % serverName)
+        else:
+            for i in range(nChild):
+                conn = self.server.accept()
+                self.childConns.append(conn)
+                logger.info('Connection from %s established.' % (self.server.last_accepted[0]))
         
         # close listener already now?
         # self.server.close()
@@ -426,8 +433,8 @@ class Server(Process):
                 return
             
 class BlockProcess(Server):
-    def __init__(self, parentAddress=None, authKey=None, serverName=None, blockIndex=None):
-        super().__init__(parentAddress, authKey, serverName=serverName)
+    def __init__(self, parentConn=None, parentAddress=None, authKey=None, serverName=None, blockIndex=None):
+        super().__init__(parentConn=parentConn, parentAddress=parentAddress, authKey=authKey, serverName=serverName)
         
         ######### special for block process ###########
         self.block=Block(blockIndex[0],blockIndex[1])
@@ -462,11 +469,14 @@ class BlockProcess(Server):
         return None
 
 class GlobalServer(Server):
-    def __init__(self, parentAddress=None, authKey=None, serverAddress=None, serverName=None, nChild=None, childBlockList=None, globalArgs=None):
-        super().__init__(parentAddress, authKey, serverAddress, serverName, nChild, childBlockList)
+    def __init__(self, parentConn=None, parentAddress=None, authKey=None, 
+                 serverAddress=None, serverName=None, 
+                 nChild=0, childConns=[], childBlockList=[], globalArgs=None):
+        super().__init__(parentConn=parentConn, parentAddress=parentAddress, authKey=authKey, 
+             serverAddress=serverAddress, serverName=serverName, 
+             nChild=nChild, childConns=childConns, childBlockList=childBlockList)
         
-        globalConn,veciPtr,vecjPtr,blockFlagPtr = globalArgs
-        self.parentConn = globalConn
+        veciPtr,vecjPtr,blockFlagPtr = globalArgs
         
         self.blockFlag = np.frombuffer(blockFlagPtr, dtype=bool)
         self.veci = np.frombuffer(veciPtr, dtype=Constants.DATA_TYPE)
@@ -502,6 +512,24 @@ class GlobalServer(Server):
         super().ins_row(xi, segList)
         return None
 
+class LocalServer(Server):
+    def __init__(self, parentConn=None, parentAddress=None, authKey=None, 
+                 serverName=None, nChild=0, childBlockList=None):
+        super().__init__(parentConn=parentConn, parentAddress=parentAddress, authKey=authKey, 
+             serverName=serverName, nChild=0, childBlockList=None)
+        # get connections from children
+        self.nChild = nChild
+        self.childUpdateFlagArr = np.ones(nChild, dtype=bool)
+        self.childConns = list()
+        self.childBlockList = childBlockList   # a list indicating the blocks for each child
+        for i in range(nChild):
+            parConn,chiConn=Pipe()
+            self.childConns.append(parConn)
+            blockIndex= childBlockList[i][0]
+            serverName = f'block-process-({blockIndex[0]},{blockIndex[1]})'
+            bp = BlockProcess(parentConn=chiConn, serverName=serverName, blockIndex=blockIndex)
+            bp.start()
+            
 def core_algo(origConn, veci, vecj, nodeFlag, blockCount, blockFlag):
     logger.info('enter core_algo')
     treeNodeArr=np.arange(Constants.N_NODE,dtype=Constants.DATA_TYPE)
@@ -575,15 +603,70 @@ def get_conn_vars():
     gPort = 16005   # port for gloabl server
     rPort = 16010   # port for regional server
     lPort = 16015   # port for local server
-    ePort = 16020
     authkey=b'baps'
-    return (initPort, gPort, rPort, lPort, ePort, authkey)
+    return (initPort, gPort, rPort, lPort, authkey)
 
 # test in a single node
 if __name__=="__main__":
+    
+    X=Constants.get_input_data()
+    n,d=X.shape
+    
+    Constants.init(n,d)
+    
+    # blockFlag, veci, vecj, needed to be shared
+#    global blockFlagPtr, veciPtr, vecjPtr
+    blockFlagPtr = RawArray(Constants.TYPE_TBL['bool'], Constants.N_BLOCK)
+    veciPtr = RawArray(Constants.CTYPE, Constants.N_BLOCK*Constants.BLOCK_SIZE)
+    vecjPtr = RawArray(Constants.CTYPE, Constants.N_BLOCK*Constants.BLOCK_SIZE)
+    
+    blockFlag = np.frombuffer(blockFlagPtr, dtype=bool)
+    veci = np.frombuffer(veciPtr, dtype=Constants.DATA_TYPE)
+    vecj = np.frombuffer(vecjPtr, dtype=Constants.DATA_TYPE)
+    mati = veci.reshape((Constants.N_BLOCK,Constants.BLOCK_SIZE))
+    matj = vecj.reshape((Constants.N_BLOCK,Constants.BLOCK_SIZE))
+    
+    nodeFlag = np.ones(Constants.N_BLOCK*Constants.BLOCK_SIZE, dtype=bool)
+    blockFlag[:] = True
+    blockCount = np.zeros(Constants.N_BLOCK, dtype=Constants.DATA_TYPE)+Constants.BLOCK_SIZE
+    if Constants.N_NODE%Constants.BLOCK_SIZE!=0:
+        blockCount[-1]=Constants.N_NODE%Constants.BLOCK_SIZE
+    
+    # set up global server
+    # set up global server
+    origConn,globalConn = Pipe()
+    LPConn,LCConn = Pipe()
+    childBlockList = [[i for i in task_gen(Constants.N_BLOCK)]]
+    # set up the global server
+    globalServer = GlobalServer(
+            parentConn=globalConn,serverName='global-server', 
+            nChild=1, childConns=[LPConn], childBlockList=childBlockList,
+            globalArgs=(veciPtr,vecjPtr,blockFlagPtr), )
+    globalServer.start()
+    
+    
+    # set up local server
+    childBlockList = [[i] for i in task_gen(Constants.N_BLOCK)]
+    # set up the global server
+    localServer = LocalServer(
+            parentConn=LCConn,serverName='local-server', 
+            nChild=len(childBlockList), childBlockList=childBlockList)
+    localServer.start()
+    
+    # running the core linkage algorithm
+    Z = core_algo(origConn, veci, vecj, nodeFlag, blockCount, blockFlag)
+    
+    print(Z)
+    
+    # shutdown global server
+    origConn.send(['STOP',])
+    localServer.join()
+
+# test in a single node
+if __name__=="__main__2":
     nMachine = 1      
     globalHostName = 'localhost'  
-    initPort,gPort,rPort,lPort,ePort,authkey = get_conn_vars() # g:global r:regional, l:local
+    initPort,gPort,rPort,lPort,authkey = get_conn_vars() # g:global r:regional, l:local
     
     X=Constants.get_input_data()
     n,d=X.shape
@@ -613,9 +696,9 @@ if __name__=="__main__":
     childBlockList = [[i] for i in task_gen(Constants.N_BLOCK)]
     # set up the global server
     globalServer = GlobalServer(
-            authKey=authkey, serverAddress=(globalHostName,gPort),serverName='global-server', 
+            parentConn=globalConn,authKey=authkey, serverAddress=(globalHostName,gPort),serverName='global-server', 
             nChild=len(childBlockList), childBlockList=childBlockList,
-            globalArgs=(globalConn,veciPtr,vecjPtr,blockFlagPtr) )
+            globalArgs=(veciPtr,vecjPtr,blockFlagPtr) )
     globalServer.start()
     
     # running the core linkage algorithm
