@@ -34,7 +34,7 @@ if __name__=="__main__":
     globalHostName = 'localhost'  
     initPort,gPort,rPort,lPort,ePort,authkey = get_conn_vars() # g:global r:regional, l:local
     
-    X=np.load('X.npy')
+    X=Constants.get_input_data()
     n,d=X.shape
     
     Constants.init(n,d)
@@ -62,7 +62,9 @@ if __name__=="__main__1":
     initConn.send(mp.cpu_count())
     
     while True:
-        cmdstr,args = initConn.recv()
+        res = initConn.recv()
+        cmdstr = res[0]
+        args = res[1:]
         if cmdstr in ['STOP','close']:
             initConn.send('done')
             initConn.close()

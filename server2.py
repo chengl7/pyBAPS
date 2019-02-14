@@ -6,73 +6,26 @@ import subprocess
 import sys,os
 import numpy as np
 from itertools import chain
+import ctypes as ct
+from multiprocessing.sharedctypes import RawArray
+
 
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(processName)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-#class MyServer:
-#    def __init__(self,address=('localhost', 6000),authkey=b'baps'):
-#        
-#        self.parentServer = Listener(address, authkey)
-#        logger.info('start global server at %s port: %s' % address)
-#        
-#    def get_all_connections(self, server, nExpectChild):
-#        timeout = time.time() + 10
-#        connArr = []
-#        while True:
-#            connArr.append(server.accept())
-            
-        
 from multiprocessing import Process,Manager  
 from multiprocessing.connection import Listener,Client, Pipe
 from functools import reduce
-#from array import array
-#
-#address = ('localhost', 6000)     # family is deduced to be 'AF_INET'
-#
-#with Listener(address, authkey=b'secret password') as listener:
-#    with listener.accept() as conn:
-#        
-#        print('connection accepted from', listener.last_accepted)
-#
-#        conn.send([2.25, None, 'junk', float])
-#
-#        conn.send_bytes(b'hello')
-#
-#        conn.send_bytes(array('i', [42, 1729]))
-#        
-#        print(conn.recv())
-
-#class worker(multiprocessing.Process):
-#    def __init__(self):
-#        super().__init__()
-#        address = ('localhost', 6000)     # family is deduced to be 'AF_INET'
-#        self.conn=Client(address, authkey=b'secret password')
-#        print('connection to %s established.' % str(address))
-#        self.value = 5
-#    
-#    def myfunc(self):
-#        cmd = self.conn.recv()
-#        print(cmd)
-#        if cmd=='STOP':
-#            raise StopIteration
-#        self.value += 1
-#        print('step %d' % self.value)
-#        yield
-#        
-#    def run(self):
-#        while True:
-#            try:
-#                next(self.myfunc())
-#            except StopIteration:
-#                return
 
 class MinTurple:
     def __init__(self,mi,mj,minVal):
         self.mi = mi
         self.mj = mj
         self.minVal = minVal
+    
+    def __str__(self):
+        return str((self.mi,self.mj,self.minVal))
     
     def __le__(self,obj):
         if self.minVal==Constants.DEL_VAL:
@@ -112,7 +65,9 @@ class Block:
         if bi==Constants.N_BLOCK-1 and (Constants.N_NODE % Constants.BLOCK_SIZE)!=0:
             ii = Constants.N_NODE % Constants.BLOCK_SIZE
             self.browflag[ii:]=False
-            self.bcolflag[ii:]=False
+        if bj==Constants.N_BLOCK-1 and (Constants.N_NODE % Constants.BLOCK_SIZE)!=0:
+            jj = Constants.N_NODE % Constants.BLOCK_SIZE
+            self.bcolflag[jj:]=False
         if bi==bj:
             self.browflag[-1]=False
             self.bcolflag[0]=False
@@ -129,7 +84,7 @@ class Block:
         self.update_batch_head(range(Constants.BLOCK_SIZE))   # minInd, minHedVal updated
         
     def cal_dist_block(self, bi, bj):
-        X = np.load('X.npy')
+        X = Constants.get_input_data()
         indsi = range(Constants.getmi(bi,0),Constants.getmi(bi,Constants.BLOCK_SIZE))
         indsj = range(Constants.getmi(bj,0),Constants.getmi(bj,Constants.BLOCK_SIZE))
         for i,ii in enumerate(indsi):
@@ -139,7 +94,9 @@ class Block:
     
     # return a tuple that is the minimum, should be call when minHedVal is not DEL_VAL
     def get_min_tuple(self):
-        assert self.minHedVal!=Constants.DEL_VAL
+        if self.minHedVal==Constants.DEL_VAL:
+            delval = Constants.DEL_VAL
+            return MinTurple(delval,delval,delval)
         ii,jj=self.minInd
         mi = Constants.getmi(self.bi, ii)
         mj = Constants.getmi(self.bj, jj)
@@ -218,6 +175,7 @@ class Block:
             valinds = np.where(self.browflag)[0]
             rowind = np.argmin(self.hedVal[valinds])
             rowind = valinds[rowind]
+            rowind = getattr(np,Constants.DATA_TYPE)(rowind)  # convert int to numpy int
             self.minHedVal = self.hedVal[rowind]
             self.minInd = (rowind,self.hedInd[rowind])
                     
@@ -228,14 +186,15 @@ class Block:
             self.bcolflag[xii]=False
             self.update_batch_head(range(Constants.BLOCK_SIZE))
         elif self.bi==xbi and self.bj==xbi:
-            self.browflag[xii]=False
-            self.count -= 1
+            if self.browflag[xii]:
+                self.browflag[xii]=False
+                self.count -= 1
             self.bcolflag[xii]=False
             self.update_batch_head(range(xii+1))
         elif self.bi==xbi and self.bj>xbi:
             self.browflag[xii]=False
             self.count -= 1
-            self.update_batch_head(xii)
+            self.update_batch_head(range(xii,xii+1))
         else:
             pass
             
@@ -247,7 +206,7 @@ class Block:
         elif self.bi==xbi and self.bj==xbi:
             self.update_batch_head(range(xii+1))
         elif self.bi==xbi and self.bj>xbi:
-            self.update_batch_head(xii)
+            self.update_batch_head(range(xii,xii+1))
         else:
             pass
 
@@ -255,13 +214,15 @@ class Constants:
     # store all relevant constants
     DATA_TYPE = 'uint16'
 #    DATA_C_TYPE = ''
-    
+    CTYPE = None
+    TYPE_TBL = None
+
     DEL_VAL = 0
 
     BLOCK_SIZE = 0
     N_BLOCK = 0
-    N_NODE = 0
-        
+    N_NODE = 0    
+    
     @classmethod
     def init(cls, n, xlen):
         cls.N_NODE = n
@@ -272,6 +233,12 @@ class Constants:
         nb = cls.get_data_type(max(n,xlen))
         cls.DATA_TYPE = 'uint'+str(nb)
 #        cls.DATA_C_TYPE = eval('ctypes.c_uint'+str(nb))
+        
+        types = [ct.c_bool, ct.c_short, ct.c_ushort, ct.c_uint, ct.c_int, ct.c_long, ct.c_float, ct.c_double]
+        typed = {str(np.dtype(ctype)): ctype for ctype in types}
+#        print(typed)
+        cls.TYPE_TBL = typed
+        cls.CTYPE = typed[Constants.DATA_TYPE]
         
         #nb=16
         cls.DEL_VAL = (1<<nb)-1
@@ -300,6 +267,11 @@ class Constants:
         minind = inds[tminind]
         minval = vec[minind]
         return (minind,minval)
+    
+    @classmethod
+    def get_input_data(cls):
+        X = np.load('X.npy')
+        return X
 
 class Server(Process):
     def __init__(self, parentAddress=None, authKey=None, serverAddress=None, serverName=None, nChild=0, childBlockList=[]):
@@ -312,7 +284,6 @@ class Server(Process):
         else:
             self.parentAddress = None
             self.parentConn = None
-            logger.info('No connection to parent server established.')
         
         self.blockFlag = np.ones(Constants.N_BLOCK, dtype=bool)
         
@@ -371,6 +342,7 @@ class Server(Process):
         if not any(self.childUpdateFlagArr):
             logger.info('No update made in this server, return current minval.')
             return self.minval
+        logger.info('childupdateflag = %s.' % str(self.childUpdateFlagArr))
         for i in range(self.nChild):
             if self.childBlockList[i] and self.childUpdateFlagArr[i]:
                 self.childConns[i].send(['get_min',])
@@ -380,14 +352,14 @@ class Server(Process):
                 reslist.append(self.childConns[i].recv())
                 self.childUpdateFlagArr[i] = False
         self.minval = reduce((lambda x,y: x if x<=y else y),reslist)
-        logger.info('Get minimal value.')
+        logger.info('Get minimal value %s.' % str(self.minval))
         return self.minval
     
     # extract xith row
     def ex_row(self, xi, delFlag=False):
         bi,ii = Constants.getbi(xi)
         logger.info('Extract row xi=%d, bi=%d ii=%d' % (xi,bi,ii))
-        actInds = [i for i in self.nChild if self.contain_bi(self.childBlockList[i],bi)]
+        actInds = [i for i in range(self.nChild) if self.contain_bi(self.childBlockList[i],bi)]
         for i in actInds:
             self.childConns[i].send(['ex_row',xi,delFlag])
             if delFlag:
@@ -429,11 +401,11 @@ class Server(Process):
             conn.close()
         if self.server:
             self.server.close()
-            logger.info('Server %s at %s is closed.' % (self.serverName,str(self.serverAddress)))
+            logger.info('Server %s is closed.' % (self.serverName))
         if self.parentConn:
             self.parentConn.close()
         raise StopIteration
-    
+        
     # reiceive cmd from parent, excute it, suspend
     def exec_task(self):
         cmdarr = self.parentConn.recv()
@@ -461,10 +433,12 @@ class BlockProcess(Server):
         self.block=Block(blockIndex[0],blockIndex[1])
     
     def del_blocks(self,bi):
+        logger.info('block (%d,%d) deleted.' % (self.block.bi,self.block.bj))
         self.parentConn.send(None)
         self.close()
     
     def get_min(self):
+        logger.info('minimal value in block (%d,%d) is %s.' % (self.block.bi, self.block.bj, str(self.block.get_min_tuple()), ) )
         return self.block.get_min_tuple()
     
     def ex_row(self, xi, delFlag=False):
@@ -472,34 +446,31 @@ class BlockProcess(Server):
         assert arr is not None
         if delFlag:
             self.block.delete_row(xi)
-        return arr
+        xbi,xii = Constants.getbi(xi)
+        k = self.block.bi if self.block.bi!=xbi else self.block.bj
+        logger.info('block (%d,%d) for xi=%d (bi=%d) k=%d extracted.' % (self.block.bi,self.block.bj, xi, xbi, k))
+        return [(k,arr)]
     
     def ins_row(self, xi, segList):
-        assert(len(segList)==0)
+        assert(len(segList)==1)
         ind,arr = segList[0]
-        tmpxi = Constants.getmi(ind[0],ind[1])
-        assert(tmpxi==xi)
+#        tmpxi = Constants.getmi(ind[0],ind[1])
+        assert(self.block.bi==ind[0] and self.block.bj==ind[1])
         
         self.block.assign_row(xi,arr)
         self.block.insert_row(xi)
+        return None
 
 class GlobalServer(Server):
-    def __init__(self, parentAddress=None, authKey=None, serverAddress=None, serverName=None, nChild=None, childBlockList=None):
+    def __init__(self, parentAddress=None, authKey=None, serverAddress=None, serverName=None, nChild=None, childBlockList=None, globalArgs=None):
         super().__init__(parentAddress, authKey, serverAddress, serverName, nChild, childBlockList)
-
-        ######### special for global server ###########        
-#        parConn, chiConn = Pipe()
-#        self.parentConn = chiConn
-#        self.origConn = parConn
         
-        self.nodeFlag = np.ones(Constants.N_BLOCK*Constants.BLOCK_SIZE, dtype=bool)
-        self.blockFlag = np.ones(Constants.N_BLOCK, dtype=bool)
-        self.blockCount = np.zeros(Constants.N_BLOCK, dtype=Constants.DATA_TYPE)+Constants.BLOCK_SIZE
-        if Constants.N_NODE%Constants.BLOCK_SIZE!=0:
-            self.blockCount[-1]=Constants.N_NODE%Constants.BLOCK_SIZE
+        globalConn,veciPtr,vecjPtr,blockFlagPtr = globalArgs
+        self.parentConn = globalConn
         
-        self.veci = np.zeros(Constants.N_BLOCK*Constants.BLOCK_SIZE, dtype=Constants.DATA_TYPE)
-        self.vecj = np.zeros(Constants.N_BLOCK*Constants.BLOCK_SIZE, dtype=Constants.DATA_TYPE)
+        self.blockFlag = np.frombuffer(blockFlagPtr, dtype=bool)
+        self.veci = np.frombuffer(veciPtr, dtype=Constants.DATA_TYPE)
+        self.vecj = np.frombuffer(vecjPtr, dtype=Constants.DATA_TYPE)
         self.mati = self.veci.reshape((Constants.N_BLOCK,Constants.BLOCK_SIZE))
         self.matj = self.vecj.reshape((Constants.N_BLOCK,Constants.BLOCK_SIZE))
         
@@ -513,19 +484,14 @@ class GlobalServer(Server):
         res = super().ex_row(xi,delFlag)
         bi,ii = Constants.getbi(xi)
         
-        if delFlag:
-            self.nodeFlag[xi]=False
-            self.blockCount[bi] -= 1
-            self.blockFlag[bi] = self.blockCount[bi]>0
         mati = getattr(self,matistr)        
         for k,arr in res:
-            mati[k,:] = arr        
-        return mati
-                
-    def ins_row(self, xi, matistr, arr):
+            mati[k,:] = arr
+        return None
+#        return mati
+    def ins_row(self, xi, matistr):
         bi,ii = Constants.getbi(xi)
         mati = getattr(self,matistr)
-        mati = arr
         segList = []
         for k in range(bi):
             if self.blockFlag[k]:
@@ -533,111 +499,65 @@ class GlobalServer(Server):
         for k in range(bi,Constants.N_BLOCK):
             if self.blockFlag[k]:
                 segList.append(((bi,k),mati[k,:]))
-        super().ins_row(self, xi, segList)
+        super().ins_row(xi, segList)
         return None
-    
-    
 
-class EventLoopServer(Process):
-    # retValue is manager shared variable
-    def __init__(self, serverAddress=None, authKey=None, serverName=None, retValue=None):        
-        
-        self.authKey = authKey
-        self.serverAddress = serverAddress
-        self.serverName = serverName
-        self.retValue = retValue
-        
-        self.nodeFlag = np.ones(Constants.N_BLOCK*Constants.BLOCK_SIZE, dtype=bool)
-        self.blockFlag = np.ones(Constants.N_BLOCK, dtype=bool)
-        self.blockCount = np.zeros(Constants.N_BLOCK, dtype=Constants.DATA_TYPE)+Constants.BLOCK_SIZE
-        if Constants.N_NODE%Constants.BLOCK_SIZE!=0:
-            self.blockCount[-1]=Constants.N_NODE%Constants.BLOCK_SIZE
-        
-        self.veci = np.zeros(Constants.N_BLOCK*Constants.BLOCK_SIZE, dtype=Constants.DATA_TYPE)
-        self.vecj = np.zeros(Constants.N_BLOCK*Constants.BLOCK_SIZE, dtype=Constants.DATA_TYPE)
-        self.mati = self.veci.reshape((Constants.N_BLOCK,Constants.BLOCK_SIZE))
-        self.matj = self.vecj.reshape((Constants.N_BLOCK,Constants.BLOCK_SIZE))
-        
-        super().__init__(target=self.myrun,name=serverName)
-
-    def setup_conn(self):
-        self.server = Listener(self.serverAddress, authkey=self.authKey)   # listener
-        logger.info('EventLoop server %s established at %s.' % (self.serverName,str(self.serverAddress)))
-        self.origConn = self.server.accept()
-        logger.info('EventLoop server connected by %s.' % str(self.server.last_accepted))
+def core_algo(origConn, veci, vecj, nodeFlag, blockCount, blockFlag):
+    logger.info('enter core_algo')
+    treeNodeArr=np.arange(Constants.N_NODE,dtype=Constants.DATA_TYPE)
+    Z = np.zeros((Constants.N_NODE-1,3),dtype=Constants.DATA_TYPE)
     
-    def myrun(self):
-        self.setup_conn()
-        self.core_algo()
-    
-    def close(self):
-        self.origConn.close()
-        self.server.close()
+    for iStep in range(Constants.N_NODE-1):
+        origConn.send(['get_min',])
+        ii,jj,minval = origConn.recv()
+        assert ii!=Constants.DEL_VAL and jj!=Constants.DEL_VAL, (ii,jj,minval)
         
-    def core_algo(self):
-        logger.info('enter core_algo')
-        treeNodeArr=np.arange(Constants.N_NODE,dtype=Constants.DATA_TYPE)
-        Z = np.zeros((Constants.N_NODE-1,3),dtype=Constants.DATA_TYPE)
-        
-        # do the main stuff in
-        for iStep in range(Constants.N_NODE-1):
-#            ii,jj,minval=get_min(blockDict)
-            self.origConn.send(['get_min',])
-            logger.info('send get min')
-            ii,jj,minval = self.origConn.recv()
-            
 #            print('%dth step, merge index-node %d-%d and %d-%d.\n' % (iStep,ii,treeNodeArr[ii],jj,treeNodeArr[jj]))
-            logger.info('%dth step, merge index-node %d-%d and %d-%d.\n' % (iStep,ii,treeNodeArr[ii],jj,treeNodeArr[jj]))
-            Z[iStep,0:2] = np.sort(treeNodeArr[[ii,jj]])
-            Z[iStep,2] = minval
-            
-            # merge ii and jj, update distance matrix
-            # extract jjth row and delete it
-            self.origConn.send(['ex_row',(jj,'matj',True)])
-            self.matj = self.origConn.recv()
-#            ex_row(blockDict,jj,blockFlag,matj,True)
-    
-            # extract iith row
-            self.origConn.send(['ex_row',(ii,'mati')])
-            self.mati = self.origConn.recv()
-            
-#            ex_row(blockDict,ii,blockFlag,mati)
-    
-            # delete jjth row
-            self.nodeFlag[jj]=False
-            bjj = jj // Constants.BLOCK_SIZE
-            self.blockCount[bjj] -= 1
-            self.blockFlag[bjj] = self.blockCount[bjj]>0
-            if not self.blockFlag[bjj]:
-                self.origConn.send(['del_blocks',(bjj)])
-                self.origConn.recv()
-            
-            # update distance of the merged node of ii and jj
-            self.update_pair_dist(self.nodeFlag, self.veci, self.vecj)
-            
-            # insert row ii into the blocks
-            self.origConn.send(['ins_row',(ii,'mati',self.mati)])
-            self.origConn.recv()
-#            ins_row(blockDict,ii,blockFlag,mati)            
-                        
-            treeNodeArr[ii] = iStep+Constants.N_NODE
-            treeNodeArr[jj] = 0
-        self.retValue.append(Z)    
-#        return Z
-    # update distance matrix between node i and j    
-    #def update_pair_dist(nodeFlag, i, j, veci, vecj):
-    def update_pair_dist(self,nodeFlag, veci, vecj):    
-    #    assert i<j
+        logger.info('%dth step, merge index-node %d-%d and %d-%d.\n' % (iStep,ii,treeNodeArr[ii],jj,treeNodeArr[jj]))
+        Z[iStep,0:2] = np.sort(treeNodeArr[[ii,jj]])
+        Z[iStep,2] = minval
         
-    #    tmpvali=vecj[i] # ith element of veci is invalid
-    #    tmpvalj=veci[j] # jth element of vecj is invalid
+        # merge ii and jj, update distance matrix
+        # extract jjth row and delete it
+        origConn.send(['ex_row',jj,'matj',True])
+        origConn.recv()
+
+        # extract iith row
+        origConn.send(['ex_row',ii,'mati'])
+        origConn.recv()
         
-        # i and j will be merged
-        # nodeFlag[j] will be False
-        # veci[i] is in the diagonal and will not be used
-        veci[nodeFlag] = np.maximum(veci[nodeFlag],vecj[nodeFlag])
-    #    veci[i] = tmpvali
-    #    veci[j] = tmpvalj   
+        # delete jjth row
+        nodeFlag[jj]=False
+        bjj = jj // Constants.BLOCK_SIZE
+        blockCount[bjj] -= 1
+        blockFlag[bjj] = blockCount[bjj]>0
+        if not blockFlag[bjj]:
+            origConn.send(['del_blocks',bjj])
+            origConn.recv()
+        
+        # update distance of the merged node of ii and jj
+        update_pair_dist(nodeFlag, veci, vecj)
+        
+        # insert row ii into the blocks
+        origConn.send(['ins_row',ii,'mati'])
+        origConn.recv()
+                    
+        treeNodeArr[ii] = iStep+Constants.N_NODE
+        treeNodeArr[jj] = 0
+    return Z
+
+# update distance matrix between node i and j    
+#def update_pair_dist(nodeFlag, i, j, veci, vecj):
+def update_pair_dist(nodeFlag, veci, vecj):    
+#    tmpvali=vecj[i] # ith element of veci is invalid
+#    tmpvalj=veci[j] # jth element of vecj is invalid
+    
+    # i and j will be merged
+    # nodeFlag[j] will be False
+    # veci[i] is in the diagonal and will not be used
+    veci[nodeFlag] = np.maximum(veci[nodeFlag],vecj[nodeFlag])
+#    veci[i] = tmpvali
+#    veci[j] = tmpvalj   
 
 def task_gen(nBlock):
     for bj in range(nBlock):
@@ -665,44 +585,47 @@ if __name__=="__main__":
     globalHostName = 'localhost'  
     initPort,gPort,rPort,lPort,ePort,authkey = get_conn_vars() # g:global r:regional, l:local
     
-    X=np.load('X.npy')
+    X=Constants.get_input_data()
     n,d=X.shape
     
     Constants.init(n,d)
     
-    # managing the core linkage algorithm
-    manager = Manager()
-    retVal = manager.list()
-    ep = EventLoopServer(serverAddress=(globalHostName,ePort),authKey=authkey,serverName='EventLoopServer',retValue=retVal)
-    ep.start()
+    # blockFlag, veci, vecj, needed to be shared
+#    global blockFlagPtr, veciPtr, vecjPtr
+    blockFlagPtr = RawArray(Constants.TYPE_TBL['bool'], Constants.N_BLOCK)
+    veciPtr = RawArray(Constants.CTYPE, Constants.N_BLOCK*Constants.BLOCK_SIZE)
+    vecjPtr = RawArray(Constants.CTYPE, Constants.N_BLOCK*Constants.BLOCK_SIZE)
     
-    print('hehe')
+    blockFlag = np.frombuffer(blockFlagPtr, dtype=bool)
+    veci = np.frombuffer(veciPtr, dtype=Constants.DATA_TYPE)
+    vecj = np.frombuffer(vecjPtr, dtype=Constants.DATA_TYPE)
+    mati = veci.reshape((Constants.N_BLOCK,Constants.BLOCK_SIZE))
+    matj = vecj.reshape((Constants.N_BLOCK,Constants.BLOCK_SIZE))
     
+    nodeFlag = np.ones(Constants.N_BLOCK*Constants.BLOCK_SIZE, dtype=bool)
+    blockFlag[:] = True
+    blockCount = np.zeros(Constants.N_BLOCK, dtype=Constants.DATA_TYPE)+Constants.BLOCK_SIZE
+    if Constants.N_NODE%Constants.BLOCK_SIZE!=0:
+        blockCount[-1]=Constants.N_NODE%Constants.BLOCK_SIZE
+    
+    # set up global server
+    origConn,globalConn = Pipe()
     childBlockList = [[i] for i in task_gen(Constants.N_BLOCK)]
     # set up the global server
     globalServer = GlobalServer(
-            parentAddress=(globalHostName,ePort), authKey=authkey, serverAddress=(globalHostName,gPort), \
-            serverName='global-server', nChild=len(childBlockList), childBlockList=childBlockList)
-    
-#    parentAddress = (globalHostName,gPort)
-#    authKey=authkey
-#    # set up the block processes
-#    for i in childBlockList:
-#        blockIndex = i[0]
-#        serverName = f'block-process-({blockIndex[0]},{blockIndex[1]})'
-#        start_server('BlockProcess',(parentAddress, authKey, serverName, blockIndex))
-    
-    # start linkage    
+            authKey=authkey, serverAddress=(globalHostName,gPort),serverName='global-server', 
+            nChild=len(childBlockList), childBlockList=childBlockList,
+            globalArgs=(globalConn,veciPtr,vecjPtr,blockFlagPtr) )
     globalServer.start()
     
-    # get result
-#    Z = globalServer.origConn.recv()
-#    Z = retVal[0]
+    # running the core linkage algorithm
+    Z = core_algo(origConn, veci, vecj, nodeFlag, blockCount, blockFlag)
+    
+    print(Z)
     
     # shutdown global server
-    ep.origConn.send(['STOP',])
+    origConn.send(['STOP',])
     globalServer.join()
-    ep.join()
 
 if __name__=="__main__1":
     # initial configuration
@@ -771,7 +694,7 @@ if __name__=="__main__1":
         nChild = len(regServerList[i])
         childBlockList = [locSerBlockList[j] for j in regServerList[i]]
         # regional server
-        initConnArr[rsind].send(['Server',(parentAddress, authKey, serverAddress, serverName, nChild, childBlockList)])
+        initConnArr[rsind].send(['Server',parentAddress, authKey, serverAddress, serverName, nChild, childBlockList])
         for j in regServerList[i]:
             parentAddress = (initHostArr[rsind],rPort)
             authKey=authkey
@@ -781,7 +704,7 @@ if __name__=="__main__1":
             childBlockList = [[k] for k in locSerBlockList[j]]
             
             # local server
-            initConnArr[j].send(['Server',(parentAddress, authKey, serverAddress, serverName, nChild, childBlockList)]) 
+            initConnArr[j].send(['Server',parentAddress, authKey, serverAddress, serverName, nChild, childBlockList]) 
             # use locSerBlockList[j] to set up processes in local server j
             
             for k in range(nChild):
@@ -790,7 +713,7 @@ if __name__=="__main__1":
                 blockIndex = childBlockList[k][0]
                 serverName = f'block-process-r{i}-l{j}-({blockIndex[0]},{blockIndex[1]})'
                 # block process
-                initConnArr[j].send(['BlockProcess',(parentAddress, authKey, serverName, blockIndex)])
+                initConnArr[j].send(['BlockProcess',parentAddress, authKey, serverName, blockIndex])
                 
     # close initial connections and shutdown the listener
     for i in range(nMachine):

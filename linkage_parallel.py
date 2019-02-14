@@ -20,8 +20,8 @@ class Constants:
     DATA_TYPE = 'uint16'
     DATA_C_TYPE = ''
     
-    HED_VAL = 0
-    END_VAL = 0
+#    HED_VAL = 0
+#    END_VAL = 0
     DEL_VAL = 0
 
     BLOCK_SIZE = 0
@@ -32,11 +32,11 @@ class Constants:
     def init(cls, n, xlen):
         cls.N_NODE = n
         
-        cls.N_BLOCK = 1
-        cls.BLOCK_SIZE = n+2
+#        cls.N_BLOCK = 1
+#        cls.BLOCK_SIZE = n+2
         
-#        cls.N_BLOCK = ceil(sqrt(n))
-#        cls.BLOCK_SIZE = ceil(n/cls.N_BLOCK)
+        cls.N_BLOCK = ceil(sqrt(n))
+        cls.BLOCK_SIZE = ceil(n/cls.N_BLOCK)
         
         nb = cls.get_data_type(max(n,xlen))
         cls.DATA_TYPE = 'uint'+str(nb)
@@ -44,8 +44,8 @@ class Constants:
         
         #nb=16
         cls.DEL_VAL = (1<<nb)-1
-        cls.HED_VAL = (1<<nb)-2
-        cls.END_VAL = (1<<nb)-3
+#        cls.HED_VAL = (1<<nb)-2
+#        cls.END_VAL = (1<<nb)-3
         
 #        cls.DEL_VAL = -1
 #        cls.HED_VAL = -2
@@ -76,6 +76,20 @@ class Constants:
         minval = vec[minind]
         return (minind,minval)
 
+class MinTurple:
+    def __init__(self,mi,mj,minVal):
+        self.mi = mi
+        self.mj = mj
+        self.minVal = minVal
+    
+    def __le__(self,obj):
+        if self.minVal==Constants.DEL_VAL:
+            return False
+        elif obj.minVal==Constants.DEL_VAL:
+            return True
+        else:
+            return self.minVal <= obj.minVal
+
 class Block:
     '''
     bmat   : bs x bs, block matrix, bs stands for block size
@@ -105,7 +119,9 @@ class Block:
         if bi==Constants.N_BLOCK-1 and (Constants.N_NODE % Constants.BLOCK_SIZE)!=0:
             ii = Constants.N_NODE % Constants.BLOCK_SIZE
             self.browflag[ii:]=False
-            self.bcolflag[ii:]=False
+        if bj==Constants.N_BLOCK-1 and (Constants.N_NODE % Constants.BLOCK_SIZE)!=0:
+            jj = Constants.N_NODE % Constants.BLOCK_SIZE
+            self.bcolflag[jj:]=False
         if bi==bj:
             self.browflag[-1]=False
             self.bcolflag[0]=False
@@ -204,6 +220,7 @@ class Block:
             valinds = np.where(self.browflag)[0]
             rowind = np.argmin(self.hedVal[valinds])
             rowind = valinds[rowind]
+            rowind = getattr(np,Constants.DATA_TYPE)(rowind)   # convert int to numpy int
             self.minHedVal = self.hedVal[rowind]
             self.minInd = (rowind,self.hedInd[rowind])
                     
@@ -214,14 +231,15 @@ class Block:
             self.bcolflag[xii]=False
             self.update_batch_head(range(Constants.BLOCK_SIZE))
         elif self.bi==xbi and self.bj==xbi:
-            self.browflag[xii]=False
-            self.count -= 1
+            if self.browflag[xii]:
+                self.browflag[xii]=False
+                self.count -= 1
             self.bcolflag[xii]=False
             self.update_batch_head(range(xii+1))
         elif self.bi==xbi and self.bj>xbi:
             self.browflag[xii]=False
             self.count -= 1
-            self.update_batch_head(xii)
+            self.update_batch_head(range(xii,xii+1))
         else:
             pass
             
@@ -233,7 +251,7 @@ class Block:
         elif self.bi==xbi and self.bj==xbi:
             self.update_batch_head(range(xii+1))
         elif self.bi==xbi and self.bj>xbi:
-            self.update_batch_head(xii)
+            self.update_batch_head(range(xii,xii+1))
         else:
             pass
 
@@ -335,14 +353,14 @@ def linkage_test(X):
         # extract jjth row and delete it
         ex_row(blockDict,jj,blockFlag,matj,True)
 
+        # extract iith row
+        ex_row(blockDict,ii,blockFlag,mati)
+
         # delete jjth row
         nodeFlag[jj]=False
         bjj = jj // Constants.BLOCK_SIZE
         blockCount[bjj] -= 1
         blockFlag[bjj] = blockCount[bjj]>0
-        
-        # extract iith row
-        ex_row(blockDict,ii,blockFlag,mati)
         
         # update distance of the merged node of ii and jj
         update_pair_dist(nodeFlag, veci, vecj)
@@ -356,16 +374,16 @@ def linkage_test(X):
     return Z    
 
 from mylinke_single_euclidean import mylinkage
-        
-n=np.random.randint(50,200)
-d=np.random.randint(20,100)
-#n = 5
-#d = 90
+#        
+#n=np.random.randint(50,200)
+#d=np.random.randint(20,100)
+##n = 5
+##d = 90
+##
+##X=np.random.randint(0,2,(n,d),dtype='uint8')
 #
-#X=np.random.randint(0,2,(n,d),dtype='uint8')
-
-#Z = linkage_test(X)
-
+##Z = linkage_test(X)
+#
 for i in range(10):
     print('test round %d' % i)
 #    n=np.random.randint(10,200)
@@ -377,8 +395,9 @@ for i in range(10):
     # which means we can merge differe nodes and both are correct
 #    n=np.random.randint(50,200)
     n=8
-    d=np.random.randint(200,1000)
+    d=np.random.randint(1000,2000)
     X=np.random.randint(0,2,(n,d),dtype='uint8')
+#    X=np.load('X.npy')
             
 #    X = np.load('XX.npy')
     Z = linkage_test(X)
