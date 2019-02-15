@@ -606,8 +606,8 @@ def get_conn_vars():
     authkey=b'baps'
     return (initPort, gPort, rPort, lPort, authkey)
 
-# test in a single node
-if __name__=="__main__":
+# test in a single node, 1 global - 1 local - sprawn processes
+if __name__=="__main__1":
     
     X=Constants.get_input_data()
     n,d=X.shape
@@ -633,17 +633,15 @@ if __name__=="__main__":
         blockCount[-1]=Constants.N_NODE%Constants.BLOCK_SIZE
     
     # set up global server
-    # set up global server
     origConn,globalConn = Pipe()
     LPConn,LCConn = Pipe()
     childBlockList = [[i for i in task_gen(Constants.N_BLOCK)]]
-    # set up the global server
+    
     globalServer = GlobalServer(
             parentConn=globalConn,serverName='global-server', 
             nChild=1, childConns=[LPConn], childBlockList=childBlockList,
             globalArgs=(veciPtr,vecjPtr,blockFlagPtr), )
     globalServer.start()
-    
     
     # set up local server
     childBlockList = [[i] for i in task_gen(Constants.N_BLOCK)]
@@ -660,9 +658,10 @@ if __name__=="__main__":
     
     # shutdown global server
     origConn.send(['STOP',])
+    globalServer.join()
     localServer.join()
 
-# test in a single node
+# test in a single node, 1 global server, spawned processes
 if __name__=="__main__2":
     nMachine = 1      
     globalHostName = 'localhost'  
@@ -710,16 +709,38 @@ if __name__=="__main__2":
     origConn.send(['STOP',])
     globalServer.join()
 
-if __name__=="__main__1":
+# 1 global server, multi regional server, N local server, spawned processes
+if __name__=="__main__":
     # initial configuration
-    nMachine = 4      
-    globalHostName = 'localhost'   
+    # python server2.py N globalhostname
+    nMachine = sys.argv[1]   
+    globalHostName = sys.argv[2]  
     
     initPort,gPort,rPort,lPort,authkey = get_conn_vars() # g:global r:regional, l:local
     
-    assert(nMachine>3)
+    X=Constants.get_input_data()
+    n,d=X.shape
     
-    Constants.init()
+    Constants.init(n,d)
+    
+    # blockFlag, veci, vecj, needed to be shared
+    blockFlagPtr = RawArray(Constants.TYPE_TBL['bool'], Constants.N_BLOCK)
+    veciPtr = RawArray(Constants.CTYPE, Constants.N_BLOCK*Constants.BLOCK_SIZE)
+    vecjPtr = RawArray(Constants.CTYPE, Constants.N_BLOCK*Constants.BLOCK_SIZE)
+    
+    blockFlag = np.frombuffer(blockFlagPtr, dtype=bool)
+    veci = np.frombuffer(veciPtr, dtype=Constants.DATA_TYPE)
+    vecj = np.frombuffer(vecjPtr, dtype=Constants.DATA_TYPE)
+    mati = veci.reshape((Constants.N_BLOCK,Constants.BLOCK_SIZE))
+    matj = vecj.reshape((Constants.N_BLOCK,Constants.BLOCK_SIZE))
+    
+    nodeFlag = np.ones(Constants.N_BLOCK*Constants.BLOCK_SIZE, dtype=bool)
+    blockFlag[:] = True
+    blockCount = np.zeros(Constants.N_BLOCK, dtype=Constants.DATA_TYPE)+Constants.BLOCK_SIZE
+    if Constants.N_NODE%Constants.BLOCK_SIZE!=0:
+        blockCount[-1]=Constants.N_NODE%Constants.BLOCK_SIZE
+    
+    assert(nMachine>3)
     
     initAddress = (globalHostName, initPort)     # family is deduced to be 'AF_INET'
     initGlobalServer = Listener((globalHostName,initPort), authkey)
@@ -759,44 +780,50 @@ if __name__=="__main__1":
             break
     
     regSerBlockList = [sorted(list(chain(*[locSerBlockList[i] for i in regServerList[j]]))) for j in range(nRegServer)]
-    
         
     # set up the global server
-    globalServer = GlobalServer(
-            parentAddress=None, authKey=authkey, serverAddress=(globalHostName,gPort), \
-            serverName='global-server', nChild=nRegServer, childBlockList=regSerBlockList)
+    origConn,globalConn = Pipe()
+    globalServer = GlobalServer(parentConn=globalConn,serverName='global-server', 
+            authKey=authkey, serverAddress=(globalHostName,gPort),
+            nChild=nRegServer, childBlockList=regSerBlockList)
+    globalServer.start()
     
     # set up the regional, local, servers
     for i in nRegServer:
         rsind = regServerList[i][0]
         #parentAddress=None, authKey=None, serverAddress=None, serverName=None, nChild=0, childBlockList=[]
+        parentConn=None
         parentAddress = (globalHostName,gPort)
         authKey=authkey
         serverAddress = (initHostArr[rsind],rPort)
         serverName = f'reg-server-{i}'
         nChild = len(regServerList[i])
+        childConns=[]
         childBlockList = [locSerBlockList[j] for j in regServerList[i]]
         # regional server
-        initConnArr[rsind].send(['Server',parentAddress, authKey, serverAddress, serverName, nChild, childBlockList])
+        initConnArr[rsind].send(['Server',parentConn,parentAddress, authKey, serverAddress, serverName, nChild, childConns, childBlockList])
+        
         for j in regServerList[i]:
+            parentConn=None
             parentAddress = (initHostArr[rsind],rPort)
             authKey=authkey
             serverAddress = (initHostArr[j],lPort)
             serverName = f'local-server-r{i}-l{j}'
             nChild = len(locSerBlockList[j])
+            childConns=[]
             childBlockList = [[k] for k in locSerBlockList[j]]
             
             # local server
-            initConnArr[j].send(['Server',parentAddress, authKey, serverAddress, serverName, nChild, childBlockList]) 
+            initConnArr[j].send(['Server',parentConn,parentAddress, authKey, serverName, nChild, childBlockList]) 
             # use locSerBlockList[j] to set up processes in local server j
             
-            for k in range(nChild):
-                parentAddress = (initHostArr[j],lPort)
-                authKey=authkey
-                blockIndex = childBlockList[k][0]
-                serverName = f'block-process-r{i}-l{j}-({blockIndex[0]},{blockIndex[1]})'
-                # block process
-                initConnArr[j].send(['BlockProcess',parentAddress, authKey, serverName, blockIndex])
+#            for k in range(nChild):
+#                parentAddress = (initHostArr[j],lPort)
+#                authKey=authkey
+#                blockIndex = childBlockList[k][0]
+#                serverName = f'block-process-r{i}-l{j}-({blockIndex[0]},{blockIndex[1]})'
+#                # block process
+#                initConnArr[j].send(['BlockProcess',parentAddress, authKey, serverName, blockIndex])
                 
     # close initial connections and shutdown the listener
     for i in range(nMachine):
@@ -806,16 +833,16 @@ if __name__=="__main__1":
         assert res=='done'
         initConnArr[i].close()
     initGlobalServer.close()
-
-    # start the linkage algorithm
-    globalServer.start()
     
-    # get result
-    Z = globalServer.origConn.recv()
+    # running the core linkage algorithm
+    Z = core_algo(origConn, veci, vecj, nodeFlag, blockCount, blockFlag)
+    
+    print(Z)
     
     # shutdown global server
-    globalServer.origConn.send(['STOP',])
-    globalServer.close()
+    origConn.send(['STOP',])
+    globalServer.join()
+    localServer.join()
 
 
 

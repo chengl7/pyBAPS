@@ -6,6 +6,7 @@ Created on Fri Feb  8 14:16:24 2019
 @author: lcheng
 """
 import multiprocessing as mp
+import sys
 
 from multiprocessing.connection import Client
 #from array import array
@@ -29,10 +30,10 @@ import numpy as np
 from server2 import MinTurple,Block,Constants,Server,BlockProcess,GlobalServer,start_server,get_conn_vars
 from server2 import task_gen
 # test in a single nod
-if __name__=="__main__":
+if __name__=="__main__0":
     nMachine = 1      
     globalHostName = 'localhost'  
-    initPort,gPort,rPort,lPort,ePort,authkey = get_conn_vars() # g:global r:regional, l:local
+    initPort,gPort,rPort,lPort,authkey = get_conn_vars() # g:global r:regional, l:local
     
     X=Constants.get_input_data()
     n,d=X.shape
@@ -47,19 +48,20 @@ if __name__=="__main__":
     for i in childBlockList:
         blockIndex = i[0]
         serverName = f'block-process-({blockIndex[0]},{blockIndex[1]})'
-        start_server('BlockProcess',(parentAddress, authKey, serverName, blockIndex))
+        start_server('BlockProcess',(None,parentAddress, authKey, serverName, blockIndex))
     
 
-if __name__=="__main__1":
+if __name__=="__main__":
     # initial configuration
-    nMachine = 4      
-    globalHostName = 'localhost'   
+    # python server2.py N globalhostname
+    nMachine = sys.argv[1]    
+    globalHostName = sys.argv[2]
     
     initPort,gPort,rPort,lPort,authkey = get_conn_vars() # g:global r:regional, l:local
     # connect to global server
     initAddress = (globalHostName, initPort)     # family is deduced to be 'AF_INET'
     initConn = Client(initAddress, authkey=authkey)
-    initConn.send(mp.cpu_count())
+#    initConn.send(mp.cpu_count())
     
     while True:
         res = initConn.recv()
