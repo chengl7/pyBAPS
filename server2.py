@@ -743,7 +743,7 @@ if __name__=="__main__":
     assert(nMachine>3)
     
     initAddress = (globalHostName, initPort)     # family is deduced to be 'AF_INET'
-    initGlobalServer = Listener((globalHostName,initPort), authkey)
+    initGlobalServer = Listener((globalHostName,initPort), authkey=authkey)
     
      # the machine for the global server is also used as local server
     subprocess.run([sys.executable, os.path.dirname(__file__)+os.path.sep+"worker2.py"]) 
