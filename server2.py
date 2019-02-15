@@ -746,7 +746,8 @@ if __name__=="__main__":
     initGlobalServer = Listener((globalHostName,initPort), authkey=authkey)
     
      # the machine for the global server is also used as local server
-    subprocess.run([sys.executable, os.path.dirname(__file__)+os.path.sep+"worker2.py"]) 
+    subprocess.run([sys.executable, os.path.dirname(os.path.realpath(__file__))+os.path.sep+"worker2.py",
+                    sys.argv[1],sys.argv[2]]) 
     
     initConnArr=[]
     initHostArr=[]
