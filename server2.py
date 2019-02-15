@@ -713,7 +713,7 @@ if __name__=="__main__2":
 if __name__=="__main__":
     # initial configuration
     # python server2.py N globalhostname
-    nMachine = sys.argv[1]   
+    nMachine = int(sys.argv[1])   
     globalHostName = sys.argv[2]  
     
     initPort,gPort,rPort,lPort,authkey = get_conn_vars() # g:global r:regional, l:local
