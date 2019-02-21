@@ -8,13 +8,12 @@ import numpy as np
 from itertools import chain
 import ctypes as ct
 from multiprocessing.sharedctypes import RawArray
-
-
+from threading import Thread
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(processName)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-from multiprocessing import Process,Manager  
+from multiprocessing import Process
 from multiprocessing.connection import Listener,Client, Pipe
 from functools import reduce
 
@@ -24,8 +23,11 @@ class MinTurple:
         self.mj = mj
         self.minVal = minVal
     
+    def get_turple(self):
+        return (self.mi, self.mj, self.minVal)
+    
     def __str__(self):
-        return str((self.mi,self.mj,self.minVal))
+        return str(self.get_turple())
     
     def __le__(self,obj):
         if self.minVal==Constants.DEL_VAL:
@@ -299,25 +301,60 @@ class Server(Process):
         else:
             self.server = None
             self.serverName = serverName
-            logger.info('Block process %s established.' % serverName)
+            logger.info('Local Server or Block Process %s established.' % serverName)
             
         # get connections from children
         self.nChild = nChild
         self.childConns = childConns
         self.childBlockList = childBlockList   # a list indicating the blocks for each child
+        self._conn = None
+        self._proc = None
         if childConns:
             logger.info('Child connection is provided for %s.' % serverName)
-        else:
-            for i in range(nChild):
-                conn = self.server.accept()
-                self.childConns.append(conn)
-                logger.info('Connection from %s established.' % (self.server.last_accepted[0]))
+        elif nChild>0:
+            self._conn, pconn = Pipe()
+#            self._proc = Process(target = self.setup_child_conns, args=(pconn,))
+            self._proc = Thread(target = self.setup_child_conns, args=(pconn,))
+            self._proc.start()
+            
+#            for i in range(nChild):
+#                conn = self.server.accept()
+#                self.childConns.append(conn)
+#                logger.info('Connection from %s established.' % (self.server.last_accepted[0]))
         
         # close listener already now?
         # self.server.close()
         
         self.minval = None  # minimum value among all blocks in this server, class MinTurple
         self.childUpdateFlagArr = np.ones(nChild, dtype=bool) # if any updates applied to child, important for getting minval
+    
+    def setup_child_conns(self, pconn):
+        logger.info('Starting child connections for %s' % self.serverName)
+
+        res = []
+        for i in range(self.nChild):
+            conn = self.server.accept()
+            res.append(conn)
+            logger.info('Connection from %s established.' % (self.server.last_accepted[0]))
+        pconn.send(res)
+        
+    
+    def check_child_conns(self):
+        if self._conn:
+            self.childConns = self._conn.recv()
+            self._proc.join()
+    
+    # different child servers may connect at different time, the order of childBlockList is thus changed
+    def update_child_block_list(self):
+        for i in range(self.nChild):
+            self.childConns[i].send(['update_child_block_list',])
+        for i in range(self.nChild):
+            res = self.childConns[i].recv()
+            if res!=self.childBlockList[i]:
+                logger.info('childBlockList[%d] updated. origChildBlockList[%d]=%s, new=%s' % (i,i,str(self.childBlockList[i]),str(res)) )
+                self.childBlockList[i] = res
+        return reduce((lambda x,y: x+y),self.childBlockList)
+        
     
     # check if the given blist contains bi
     # blist is a list consisting block index, e.g. [(1,3),(3,5)]
@@ -351,11 +388,13 @@ class Server(Process):
             return self.minval
         logger.info('childupdateflag = %s.' % str(self.childUpdateFlagArr))
         for i in range(self.nChild):
-            if self.childBlockList[i] and self.childUpdateFlagArr[i]:
+#            if self.childBlockList[i] and self.childUpdateFlagArr[i]:
+            if self.childBlockList[i]:
                 self.childConns[i].send(['get_min',])
         reslist = []
         for i in range(self.nChild):
-            if self.childBlockList[i] and self.childUpdateFlagArr[i]:
+#            if self.childBlockList[i] and self.childUpdateFlagArr[i]:
+            if self.childBlockList[i]:
                 reslist.append(self.childConns[i].recv())
                 self.childUpdateFlagArr[i] = False
         self.minval = reduce((lambda x,y: x if x<=y else y),reslist)
@@ -380,6 +419,8 @@ class Server(Process):
     def ins_row(self, xi, segList):
         bi,ii = Constants.getbi(xi)
         logger.info('Insert row xi=%d, bi=%d ii=%d' % (xi,bi,ii))
+        logger.info('Insert row xi=%d, segList=%s' % (xi,str(segList)))
+        
         # segList: [((1,2),arr), ((2,2),arr)]
         actInds = [i for i in range(self.nChild) if self.contain_bi(self.childBlockList[i],bi)]
         segListArr = [[] for _ in range(self.nChild)]
@@ -389,7 +430,10 @@ class Server(Process):
                 if seg[0] in self.childBlockList[i]:
                     segListArr[i].append(seg)
                     break
-                
+        logger.info('Insert row xi=%d, actInds=%s' % (xi,str(actInds)))     
+        logger.info('Insert row xi=%d, segListArr=%s' % (xi,str(segListArr)))
+        logger.info('Insert row xi=%d, self.childBlockList=%s' % (xi,str(self.childBlockList)))
+        
         for i in actInds:
             self.childConns[i].send(['ins_row',xi,segListArr[i]])
             self.childUpdateFlagArr[i]=True
@@ -404,13 +448,17 @@ class Server(Process):
     
     def close(self):
         for conn in self.childConns:
-            conn.send(['STOP',])
-            conn.close()
+            try:
+                conn.send(['STOP',])
+            except BrokenPipeError:
+                logger.info('child connection closed')
+            finally:
+                conn.close()
         if self.server:
             self.server.close()
-            logger.info('Server %s is closed.' % (self.serverName))
         if self.parentConn:
             self.parentConn.close()
+        logger.info('Server %s is closed.' % (self.serverName))
         raise StopIteration
         
     # reiceive cmd from parent, excute it, suspend
@@ -438,10 +486,14 @@ class BlockProcess(Server):
         
         ######### special for block process ###########
         self.block=Block(blockIndex[0],blockIndex[1])
+        
+    def update_child_block_list(self):
+        return [(self.block.bi,self.block.bj)]
     
     def del_blocks(self,bi):
         logger.info('block (%d,%d) deleted.' % (self.block.bi,self.block.bj))
         self.parentConn.send(None)
+        logger.info('Block process (%d,%d) closed.' % (self.block.bi,self.block.bj))
         self.close()
     
     def get_min(self):
@@ -484,10 +536,10 @@ class GlobalServer(Server):
         self.mati = self.veci.reshape((Constants.N_BLOCK,Constants.BLOCK_SIZE))
         self.matj = self.vecj.reshape((Constants.N_BLOCK,Constants.BLOCK_SIZE))
         
-    # get the minimum value from all blocks in the dictionary
-    def get_min(self):
-        m=super().get_min()
-        return (m.mi,m.mj,m.minVal)
+#    # get the minimum value from all blocks in the dictionary
+#    def get_min(self):
+#        m=super().get_min()
+#        return (m.mi,m.mj,m.minVal)
     
     # extract xith row
     def ex_row(self, xi, matistr, delFlag=False):
@@ -535,9 +587,14 @@ def core_algo(origConn, veci, vecj, nodeFlag, blockCount, blockFlag):
     treeNodeArr=np.arange(Constants.N_NODE,dtype=Constants.DATA_TYPE)
     Z = np.zeros((Constants.N_NODE-1,3),dtype=Constants.DATA_TYPE)
     
+    logger.info('update child block List')
+    origConn.send(['update_child_block_list',])
+    origConn.recv()
+    
     for iStep in range(Constants.N_NODE-1):
         origConn.send(['get_min',])
-        ii,jj,minval = origConn.recv()
+        minturple = origConn.recv()
+        ii,jj,minval = minturple.get_turple()
         assert ii!=Constants.DEL_VAL and jj!=Constants.DEL_VAL, (ii,jj,minval)
         
 #            print('%dth step, merge index-node %d-%d and %d-%d.\n' % (iStep,ii,treeNodeArr[ii],jj,treeNodeArr[jj]))
@@ -596,7 +653,10 @@ def task_gen(nBlock):
 def start_server(cmdstr,args):
     func=getattr(sys.modules['__main__'],cmdstr)
     server = func(*args)
-    server.start()            
+#    server.check_child_conns()   # might block regional server if local server on the same machine is not ready
+    return server
+#    server.start()
+             
 
 def get_conn_vars():
     initPort = 16000
@@ -607,7 +667,7 @@ def get_conn_vars():
     return (initPort, gPort, rPort, lPort, authkey)
 
 # test in a single node, 1 global - 1 local - sprawn processes
-if __name__=="__main__1":
+if __name__=="__main__0":
     
     X=Constants.get_input_data()
     n,d=X.shape
@@ -661,60 +721,14 @@ if __name__=="__main__1":
     globalServer.join()
     localServer.join()
 
-# test in a single node, 1 global server, spawned processes
-if __name__=="__main__2":
-    nMachine = 1      
-    globalHostName = 'localhost'  
-    initPort,gPort,rPort,lPort,authkey = get_conn_vars() # g:global r:regional, l:local
-    
-    X=Constants.get_input_data()
-    n,d=X.shape
-    
-    Constants.init(n,d)
-    
-    # blockFlag, veci, vecj, needed to be shared
-#    global blockFlagPtr, veciPtr, vecjPtr
-    blockFlagPtr = RawArray(Constants.TYPE_TBL['bool'], Constants.N_BLOCK)
-    veciPtr = RawArray(Constants.CTYPE, Constants.N_BLOCK*Constants.BLOCK_SIZE)
-    vecjPtr = RawArray(Constants.CTYPE, Constants.N_BLOCK*Constants.BLOCK_SIZE)
-    
-    blockFlag = np.frombuffer(blockFlagPtr, dtype=bool)
-    veci = np.frombuffer(veciPtr, dtype=Constants.DATA_TYPE)
-    vecj = np.frombuffer(vecjPtr, dtype=Constants.DATA_TYPE)
-    mati = veci.reshape((Constants.N_BLOCK,Constants.BLOCK_SIZE))
-    matj = vecj.reshape((Constants.N_BLOCK,Constants.BLOCK_SIZE))
-    
-    nodeFlag = np.ones(Constants.N_BLOCK*Constants.BLOCK_SIZE, dtype=bool)
-    blockFlag[:] = True
-    blockCount = np.zeros(Constants.N_BLOCK, dtype=Constants.DATA_TYPE)+Constants.BLOCK_SIZE
-    if Constants.N_NODE%Constants.BLOCK_SIZE!=0:
-        blockCount[-1]=Constants.N_NODE%Constants.BLOCK_SIZE
-    
-    # set up global server
-    origConn,globalConn = Pipe()
-    childBlockList = [[i] for i in task_gen(Constants.N_BLOCK)]
-    # set up the global server
-    globalServer = GlobalServer(
-            parentConn=globalConn,authKey=authkey, serverAddress=(globalHostName,gPort),serverName='global-server', 
-            nChild=len(childBlockList), childBlockList=childBlockList,
-            globalArgs=(veciPtr,vecjPtr,blockFlagPtr) )
-    globalServer.start()
-    
-    # running the core linkage algorithm
-    Z = core_algo(origConn, veci, vecj, nodeFlag, blockCount, blockFlag)
-    
-    print(Z)
-    
-    # shutdown global server
-    origConn.send(['STOP',])
-    globalServer.join()
-
 # 1 global server, multi regional server, N local server, spawned processes
 if __name__=="__main__":
     # initial configuration
     # python server2.py N globalhostname
     nMachine = int(sys.argv[1])   
     globalHostName = sys.argv[2]  
+    
+    print('server args: ',nMachine, globalHostName)
     
     initPort,gPort,rPort,lPort,authkey = get_conn_vars() # g:global r:regional, l:local
     
@@ -745,6 +759,8 @@ if __name__=="__main__":
     initAddress = (globalHostName, initPort)     # family is deduced to be 'AF_INET'
     initGlobalServer = Listener((globalHostName,initPort), authkey=authkey)
     
+    logger.info('initial global server established at %s' % str(initAddress))
+    
      # the machine for the global server is also used as local server
     subprocess.Popen([sys.executable, os.path.dirname(os.path.realpath(__file__))+os.path.sep+"worker2.py",
                     sys.argv[1],sys.argv[2]]) 
@@ -755,8 +771,10 @@ if __name__=="__main__":
     for i in range(nMachine):
         initConnArr.append(initGlobalServer.accept())
         initHostArr.append(initGlobalServer.last_accepted[0])
-    #for i in range(nMachine):
-    #    cpuCountArr[i]=initConnArr[i].recv()
+    for i in range(nMachine):
+        initConnArr[i].recv()  # confirmation of connection
+#        cpuCountArr[i]=initConnArr[i].recv()
+    logger.info('client list: %s' % str(initHostArr))
     
 #    nMachine=10
     nRegServer = int(round(np.sqrt(nMachine)))
@@ -781,16 +799,20 @@ if __name__=="__main__":
             break
     
     regSerBlockList = [sorted(list(chain(*[locSerBlockList[i] for i in regServerList[j]]))) for j in range(nRegServer)]
-        
+    
+    print('locSerBlockList= ',locSerBlockList)
+    print('regSerBlockList= ',regSerBlockList)
+    
     # set up the global server
     origConn,globalConn = Pipe()
     globalServer = GlobalServer(parentConn=globalConn,serverName='global-server', 
             authKey=authkey, serverAddress=(globalHostName,gPort),
-            nChild=nRegServer, childBlockList=regSerBlockList)
-    globalServer.start()
+            nChild=nRegServer, childBlockList=regSerBlockList,
+            globalArgs=(veciPtr,vecjPtr,blockFlagPtr))
+    logger.info('set up global server')
     
-    # set up the regional, local, servers
-    for i in nRegServer:
+    # set up regional servers
+    for i in range(nRegServer):
         rsind = regServerList[i][0]
         #parentAddress=None, authKey=None, serverAddress=None, serverName=None, nChild=0, childBlockList=[]
         parentConn=None
@@ -802,38 +824,81 @@ if __name__=="__main__":
         childConns=[]
         childBlockList = [locSerBlockList[j] for j in regServerList[i]]
         # regional server
-        initConnArr[rsind].send(['Server',parentConn,parentAddress, authKey, serverAddress, serverName, nChild, childConns, childBlockList])
+        initConnArr[rsind].send(['Server',parentConn, parentAddress, authKey, serverAddress, serverName, nChild, childConns, childBlockList])
+    for i in range(nRegServer):
+        rsind = regServerList[i][0]
+        initConnArr[rsind].recv()
+        print('set up regional server at ',initHostArr[rsind])
+    
+    globalServer.check_child_conns()  # ensure child connections (regional servers) are ready
         
+    # set up local servers
+    for i in range(nRegServer):
+        rsind = regServerList[i][0]
         for j in regServerList[i]:
             parentConn=None
             parentAddress = (initHostArr[rsind],rPort)
             authKey=authkey
-            serverAddress = (initHostArr[j],lPort)
             serverName = f'local-server-r{i}-l{j}'
             nChild = len(locSerBlockList[j])
-            childConns=[]
             childBlockList = [[k] for k in locSerBlockList[j]]
             
             # local server
-            initConnArr[j].send(['Server',parentConn,parentAddress, authKey, serverName, nChild, childBlockList]) 
+            initConnArr[j].send(['LocalServer',parentConn,parentAddress, authKey, serverName, nChild, childBlockList]) 
             # use locSerBlockList[j] to set up processes in local server j
+    for i in range(nRegServer):        
+        for j in regServerList[i]:
+            initConnArr[j].recv()
+            print('set up local server at ',initHostArr[j])
+    
+    # update child connections and start servers        
+    for i in range(nMachine):
+        initConnArr[i].send(['START_ALL'])
+    for i in range(nMachine):
+        initConnArr[i].recv()
             
-#            for k in range(nChild):
-#                parentAddress = (initHostArr[j],lPort)
-#                authKey=authkey
-#                blockIndex = childBlockList[k][0]
-#                serverName = f'block-process-r{i}-l{j}-({blockIndex[0]},{blockIndex[1]})'
-#                # block process
-#                initConnArr[j].send(['BlockProcess',parentAddress, authKey, serverName, blockIndex])
-                
-    # close initial connections and shutdown the listener
-    for i in range(nMachine):
-        initConnArr[i].send(['STOP',])
-    for i in range(nMachine):
-        res = initConnArr[i].recv()
-        assert res=='done'
-        initConnArr[i].close()
-    initGlobalServer.close()
+#    # set up the regional, local, servers
+#    for i in range(nRegServer):
+#        rsind = regServerList[i][0]
+#        #parentAddress=None, authKey=None, serverAddress=None, serverName=None, nChild=0, childBlockList=[]
+#        parentConn=None
+#        parentAddress = (globalHostName,gPort)
+#        authKey=authkey
+#        serverAddress = (initHostArr[rsind],rPort)
+#        serverName = f'reg-server-{i}'
+#        nChild = len(regServerList[i])
+#        childConns=[]
+#        childBlockList = [locSerBlockList[j] for j in regServerList[i]]
+#        # regional server
+#        initConnArr[rsind].send(['Server',parentConn, parentAddress, authKey, serverAddress, serverName, nChild, childConns, childBlockList])
+#        print('set up regional server at ',initHostArr[rsind])
+#        
+#        for j in regServerList[i]:
+#            parentConn=None
+#            parentAddress = (initHostArr[rsind],rPort)
+#            authKey=authkey
+#            serverAddress = (initHostArr[j],lPort)
+#            serverName = f'local-server-r{i}-l{j}'
+#            nChild = len(locSerBlockList[j])
+#            childConns=[]
+#            childBlockList = [[k] for k in locSerBlockList[j]]
+#            
+#            # local server
+#            initConnArr[j].send(['Server',parentConn,parentAddress, authKey, serverName, nChild, childBlockList]) 
+#            # use locSerBlockList[j] to set up processes in local server j
+#            print('set up local server at ',initHostArr[j])
+##            for k in range(nChild):
+##                parentAddress = (initHostArr[j],lPort)
+##                authKey=authkey
+##                blockIndex = childBlockList[k][0]
+##                serverName = f'block-process-r{i}-l{j}-({blockIndex[0]},{blockIndex[1]})'
+##                # block process
+##                initConnArr[j].send(['BlockProcess',parentAddress, authKey, serverName, blockIndex])
+    
+#    globalServer.check_child_conns()  # ensure child connections are ready
+    globalServer.start()              # run core algorithm
+            
+    
     
     # running the core linkage algorithm
     Z = core_algo(origConn, veci, vecj, nodeFlag, blockCount, blockFlag)
@@ -843,7 +908,16 @@ if __name__=="__main__":
     # shutdown global server
     origConn.send(['STOP',])
     globalServer.join()
-    localServer.join()
+#    localServer.join()
+    
+    # close initial connections and shutdown the listener
+    for i in range(nMachine):
+        initConnArr[i].send(['STOP',])
+    for i in range(nMachine):
+        res = initConnArr[i].recv()
+        assert res=='done'
+        initConnArr[i].close()
+    initGlobalServer.close()
 
 
 
