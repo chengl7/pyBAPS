@@ -952,12 +952,22 @@ class Constants:
     nMaxProcPerMachine = 50
     
     @classmethod
-    def init(cls, n, xlen, datafile, outdir, nMachine, distopt='Hamming'):
+    def init(cls, n, xlen, datafile, outdir, nMachine, nBlock=None, distopt='Hamming'):
         cls.N_NODE = n
+        assert(n*(n+1)>10*nMachine)
         
         nb1 = int(np.ceil(np.sqrt(n)/10))
         nb2 = int(np.floor(-0.5+0.5*np.sqrt(1+8*nMachine*cls.nMaxProcPerMachine)))
-        cls.N_BLOCK = nb1 if nb1<nb2 else nb2
+        nb = nb1 if nb1<nb2 else nb2
+        if nb*(nb+1)/2<nMachine:  # ensure at least one block for each machine
+            nb = int(np.ceil(-0.5+0.5*np.sqrt(1+8*nMachine)))
+            
+        if nBlock:
+            assert nBlock*nBlock+nBlock < 2*nMachine*cls.nMaxProcPerMachine
+            assert nBlock*nBlock+nBlock >= 2*nMachine
+            cls.N_BLOCK=nBlock
+        else:
+            cls.N_BLOCK = nb
         cls.BLOCK_SIZE = int(np.ceil(n/cls.N_BLOCK))
         
         nb = cls.choose_data_bits(max(n,xlen))

@@ -1,8 +1,11 @@
 #!/bin/bash
 ##SBATCH --time=0-03:25:00    # 5 mins
 #SBATCH --time=0-00:05:00    # 5 mins
+#SBATCH -p coin
+##SBATCH -p grid
 #SBATCH -p short
 #SBATCH -p batch
+##SBATCH -p hugemem
 #SBATCH -p debug
 #SBATCH -o a.out
 #SBATCH -e a.err
@@ -23,7 +26,6 @@ if [ $# -eq 0 ]; then
     echo "Usage: sbatch submit.sh X1K.npy test1K X10K.npy test10K"
     exit 1
 fi
-exit 1
 
 server=$(echo "$SLURM_JOB_NODELIST" | cut -d ',' -f1)
 server=$(echo "$server" | cut -d '-' -f1)
