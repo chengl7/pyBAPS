@@ -224,6 +224,14 @@ def get_tree_outliers(root):
     count_outlier(root, heightCutoffArr, cntArr, flagArr)
     mind = np.argmin(np.abs(cntArr - 0.1*root.nLeafNode))  # checked that subtree root nLeafNode is correct
     return np.sort([i for i in outlier_gen(root, heightCutoffArr[mind])])
+
+def tree_split_k(root, k):
+    assert not root is None
+    n = root.nLeafNode
+    assert k<n
+    heightArr = get_inner_heights(root)
+    cutoff = heightArr[n-k-1]
+    return [i for i in inner_generator_leaf(root,cutoff)]
     
 if __name__=="__main__":                
     
@@ -278,6 +286,11 @@ if __name__=="__main__":
     
     print('Split the tree into two')
     print(tree_split_two(r))
+    print()
+    
+    k = 9
+    print(f'Split the tree into k={k} clusters')
+    print(tree_split_k(r, k))
     print()
     
     print('testing cutting the tree at a given set of cutoffs')
