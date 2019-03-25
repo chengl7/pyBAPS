@@ -232,20 +232,25 @@ def tree_split_k(root, k):
     heightArr = get_inner_heights(root)
     cutoff = heightArr[n-k-1]
     return [i for i in inner_generator_leaf(root,cutoff)]
-    
+
+# think about trees that are not monotonic, e.g. https://uk.mathworks.com/help/stats/linkage.html#Tips
+# does not seem to cause any code to break down, 25.03.2019
+# tested many trees constructed using centroid, ward, median and did not see any brokendown case
+
 if __name__=="__main__":                
     
     from scipy.cluster.hierarchy import linkage
-    np.random.seed(0)
+#    np.random.seed(0)
     n=10
     #n = 100
     #arr = list()
     #idxarr = list()
     #arr = np.zeros(n,dtype='i')
     #idxarr = np.zeros(n,dtype='i')
-    np.random.seed(0)
+#    np.random.seed(0)
     x = np.random.randn(n,4)
-    Z = linkage(x,'complete')
+#    Z = linkage(x,'complete')
+    Z = linkage(x,method='median')
     r,arr,idxarr = build_tree(Z,n)
     
     print('Constructed tree matrix')
@@ -256,9 +261,11 @@ if __name__=="__main__":
     disp_tree(r)
     print()
     
-    subarr=[1,2,3,4]
-    #subarr=  np.sort(np.random.choice(100,30,replace=False))
+#    subarr=[1,2,3,4]
+    k = round(n*0.3)
+    subarr=  np.sort(np.random.choice(n,k,replace=False))
     assert len(np.unique(subarr)==len(subarr))
+    assert len(subarr)<=n
     st = subtree(r,idxarr[subarr],arr)
     set_depth(st,0)
     print(f'display subtree for subarr={subarr}')
@@ -302,6 +309,9 @@ if __name__=="__main__":
     print([i for i in outlier_gen(r, 1)])
     print([i for i in outlier_gen(r, 1.4)])
     print()
+    
+    print('getting tree outliers')
+    print(get_tree_outliers(r))
     
     print('getting tree outliers (substree)')
     print(get_tree_outliers(st))
