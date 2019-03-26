@@ -147,14 +147,37 @@ def cal_logml_cnt(popCnt):
     tmps = np.sum(tmp,axis=1) - sumLGArr[np.sum(popCnt,axis=1)]
     return np.sum(tmps)
     
+def try_merge_pop(partition, logmlArr, popFlagArr, popCntMat):
+#    nMaxPop = len(popFlagArr)
+    valPops = np.where(popFlagArr)[0]
+    currBestRes = OptRes()
+    
+    def pair_gen(arr):
+        n = len(arr)
+        for i in range(n):
+            for j in range(i+1,n):
+                yield(i,j)
+    for ipop,jpop in pair_gen(valPops):
+        incLogml = cal_logml_cnt(popCntMat[ipop]+popCntMat[jpop])-logmlArr[ipop]-logml[jpop]
+        if incLogml>1e-9 and incLogml>currBestRes.incLogml:
+            currBestRes.set_val(incLogml, [], ipop, jpop)
+    
+    
+    if currBestRes.incLogml>1e-9:
+        jpop = currBestRes.jPop
+        currBestRes.inds = np.where(partition==jpop)[0]
+        return currBestRes
+    else:
+        return None
     
     
 
+# TODO, logmlMat not used 
 # get the best movement given the optimization option
 def perform_opt(opt, grpMat, partition, logmlMat, logmlArr, popFlagArr, popCntMat, tree, leafArr, idxLeafArr):
     if opt==4:
-        # TODO, CALL function TO MERGE TWO POPULATIONS
-        pass
+        return try_merge_pop(partition, logmlArr, popFlagArr, popCntMat)
+
     optFuncDict = {1:get_tree_outliers, 2:tree_split_cutoff, 3:tree_split_two}
     
     optfunc = optFuncDict[opt]
