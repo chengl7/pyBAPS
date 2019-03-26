@@ -16,7 +16,8 @@ class TreeNode:
         self.depth = 0
     
         
-def build_tree(Z, n):
+def build_tree(Z):
+    n = Z.shape[0]+1
     tmplist = []
     for i in range(n-1):
         currNode = TreeNode()
@@ -96,7 +97,7 @@ def inner_generator(root):
 # generate the leaf nodes of all inner nodes of height lower than cutoff        
 def inner_generator_leaf(root,cutoff):
     if root.height<=cutoff:
-        res = np.array(set([n.id for n in leaf_generator(root)]))
+        res = np.array([n.id for n in leaf_generator(root)])
         yield res
         return
     if root.leftChild:
@@ -136,6 +137,7 @@ def set_boarder(root, arr, idxarr, left, right):
     set_boarder(root.leftChild, arr, idxarr, left, root.bmid)
     set_boarder(root.rightChild, arr, idxarr, root.bmid, right)            
             
+# e.g. st = subtree(r,idxarr[subarr],arr)
 def subtree(root, subidx, arr):
     # subidx = idxarr[subarr]
     assert len(np.unique(subidx)) == len(subidx), f'input subarr not unique {arr[subidx]}'
@@ -187,8 +189,8 @@ def tree_split_cutoff(root, cutoffPerctile=None):
     return [i for i in inner_generator_leaf(root,heightCutoff)]
     
 def tree_split_two(root):
-    lres = np.array(set([n.id for n in leaf_generator(root.leftChild)]))
-    rres = np.array(set([n.id for n in leaf_generator(root.rightChild)]))
+    lres = np.array([n.id for n in leaf_generator(root.leftChild)])
+    rres = np.array([n.id for n in leaf_generator(root.rightChild)])
     return (lres,rres)    
 
 # count the number of outliers given the cutoff in cutoffArr
@@ -251,7 +253,7 @@ if __name__=="__main__":
     x = np.random.randn(n,4)
 #    Z = linkage(x,'complete')
     Z = linkage(x,method='median')
-    r,arr,idxarr = build_tree(Z,n)
+    r,arr,idxarr = build_tree(Z)
     
     print('Constructed tree matrix')
     print(Z)
