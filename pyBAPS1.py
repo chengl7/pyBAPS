@@ -40,7 +40,7 @@ class OptRes():
             popCntMat[jpop] += popCntMat[ipop]
             update_logml_vars(popCntMat, logmlMat, logmlArr, popFlagArr, [jpop])
         else:
-            tmpcnt = np.sum(grpMat[ipopInds,:,:],axis=0)
+            tmpcnt = np.sum(grpMat[self.inds,:,:],axis=0)
             popCntMat[jpop] += tmpcnt
             popCntMat[ipop] -= tmpcnt
             update_logml_vars(popCntMat, logmlMat, logmlArr, popFlagArr, [ipop,jpop])
@@ -136,7 +136,17 @@ def try_move_inds(ipop, batchInds, grpMat, popFlagArr, popCntMat, logmlArr):
     incLogml = -np.Inf
     
     tmpcnt = get_counts(grpMat,batchInds)
-    logDelDiff = cal_logml_cnt(popCntMat[ipop,:,:]-tmpcnt) - logmlArr[ipop]
+    try:
+        logDelDiff = cal_logml_cnt(popCntMat[ipop,:,:]-tmpcnt) - logmlArr[ipop]
+    except:
+        print(1)
+#        popCntMat[ipop,225,:]
+#array([ 0, 20,  0,  0], dtype=uint16)
+#tmpcnt[225,:]
+#array([0, 0, 1, 0], dtype=uint8)
+# ipop=195
+# batchInds=55
+# 
     maxAddLogml=-np.Inf
     maxJpop = -1
     for jpop in range(len(popFlagArr)):
@@ -324,7 +334,7 @@ if __name__ == "__main__":
     
     # stochastic optimization
     nOpt = 1000
-    np.random.seed(0)
+#    np.random.seed(0)
     optArr = np.random.randint(1,5,size=nOpt)
 #    optArr = np.zeros(nOpt,dtype='i')+4
     nTrial=0
@@ -342,7 +352,7 @@ if __name__ == "__main__":
         if res:
             isMerge = opt==optMerge or len(res.inds)==np.sum(partition==res.iPop)
             logml = res.update_global_vars(grpMat, partition, logmlMat, logmlArr, popFlagArr, popCntMat, isMerge)
-            print(np.setdiff1d(np.arange(nMaxPop),np.unique(partition)))
+#            print(np.setdiff1d(np.arange(nMaxPop),np.unique(partition)))
             nTrial=0
             resQueue.put(logml,partition.copy())
         else:
@@ -357,7 +367,7 @@ if __name__ == "__main__":
     # output result
     print(f'top {nTopRes} results')
     for tlgml, tpart in resQueue.tolist():
-        print(tlgml)
+        print(tlgml, f'\t#part={len(np.unique(tpart))}')
 
 
     
