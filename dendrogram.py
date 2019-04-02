@@ -179,19 +179,24 @@ def get_inner_heights(root):
     res = np.sort(reslist)
     return res
 
-def tree_split_cutoff(root, cutoffPerctile=None):
+def tree_split_cutoff(root, cutoffPerctile=None) -> list:
     if cutoffPerctile:
         cutoff = cutoffPerctile
     else:
         cutoff = np.random.rand(1)*30+20
-    heightArr = get_inner_heights(root)
-    heightCutoff = np.percentile(heightArr,cutoff)
-    return [i for i in inner_generator_leaf(root,heightCutoff)]
     
-def tree_split_two(root):
+    heightArr = get_inner_heights(root)
+    
+    if len(heightArr)<=1:
+        return [np.array([n.id]) for n in leaf_generator(root)]  # in case only one inner node
+        
+    heightCutoff = np.percentile(heightArr,cutoff)
+    return [n for n in inner_generator_leaf(root,heightCutoff)]  # [array([2]), array([7]), array([3, 5]), array([6]), array([1, 4]), array([0]), array([8, 9])]
+    
+def tree_split_two(root) -> list:
     lres = np.array([n.id for n in leaf_generator(root.leftChild)])
     rres = np.array([n.id for n in leaf_generator(root.rightChild)])
-    return (lres,rres)    
+    return [lres,rres]    
 
 # count the number of outliers given the cutoff in cutoffArr
 # pass cutoffArr, cntArr by reference, flagArr by copy
@@ -216,8 +221,10 @@ def outlier_gen(root, cutoff):
         yield from outlier_gen(root.leftChild, cutoff)
         yield from outlier_gen(root.rightChild, cutoff)
         
-def get_tree_outliers(root):
+def get_tree_outliers(root) -> list:
     heightArr = get_inner_heights(root)
+    if len(heightArr)==1:
+        heightArr = np.insert(heightArr,0,0) # in case of only 1 inner node
     # 0.5(1-x)n < i < (1-x)n, where x is the expected outlier percentage
     # set the range as (0.5*(1-x)*100, (1-x)*100+1)
     heightCutoffArr = np.percentile(heightArr,np.arange(45,91,5))  # get around 10% outliers
@@ -225,7 +232,9 @@ def get_tree_outliers(root):
     flagArr = np.ones(len(heightCutoffArr),dtype=bool)
     count_outlier(root, heightCutoffArr, cntArr, flagArr)
     mind = np.argmin(np.abs(cntArr - 0.1*root.nLeafNode))  # checked that subtree root nLeafNode is correct
-    return np.sort([i for i in outlier_gen(root, heightCutoffArr[mind])])
+#    return np.sort([i for i in outlier_gen(root, heightCutoffArr[mind])])
+    return [np.array([i]) for i in outlier_gen(root, heightCutoffArr[mind])]
+
 
 def tree_split_k(root, k):
     assert not root is None
