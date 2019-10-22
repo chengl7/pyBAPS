@@ -26,6 +26,9 @@ from multiprocessing import Process
 from multiprocessing.connection import Listener, Pipe
             
 def core_algo(origConn, veci, vecj, mati, matj, nodeFlag, blockCount, blockFlag):
+    """Core linkage algorithm
+
+    """
     logger.debug('enter core_algo')
     treeNodeArr=np.arange(Constants.N_NODE,dtype=Constants.DATA_TYPE)
     Z = np.zeros((Constants.N_NODE-1,3),dtype=Constants.DATA_TYPE)

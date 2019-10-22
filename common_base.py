@@ -15,25 +15,34 @@ loggingLevel = logging.INFO  # logging.DEBUG, logging.INFO, logging.WARNING
 #from multiprocessing import Process
 
 def disp_usage(log_func):
+    """Calculate cpu and memory usage and supply to arg function log_func."""
     cp = psutil.cpu_percent()
     mem = psutil.virtual_memory()
     total = mem.total >> 30   # GB
     avail = mem.available >> 30
     perc = mem.percent
-    used = mem.used >> 30
-    
+    used = mem.used >> 30 
     log_func(f'cpu usage: {cp}%')
     log_func(f'mem usage: total={total}GB avail={avail}GB use_percent={perc}% used={used}GB')
     
 def disp_usage_forever(log_func):
+    """Call disp_usage for a given log_func every 60 seconds."""
     while True:
         disp_usage(log_func)
         time.sleep(60)
 
 def count_fasta(fastaFileName, snpflag=False):
-    """
-    count number of sequences, and length of sequence, snp indexes
-    :return  nSeq, seqLen, snpInds
+    # JS: Should snpInds be delegated to a different function?
+    """Count number of sequences, and length of sequence, snp indexes.
+
+    Args:
+        fastaFileName: path of fasta file to summarize.
+    Keyword args:
+        snpflag: whether to compute snpInds.
+    Returns:
+        nSeq: number of sequences.
+        seqLen: length of sequence(s).
+        snpInds (np.array): indices of SNP positions.
     """
     nSeq = 0
     seqLen=0
@@ -69,15 +78,19 @@ def count_fasta(fastaFileName, snpflag=False):
     # extract the snp sites
     if snpflag:
         snpinds = np.array([i for i in range(seqLen) if is_snp(baseCntMat[:,i])])
-                    
-                
+                     
     assert nSeq<2**32, f'nSeq={nSeq} should be smaller than 2**32={2**32}.'
     return nSeq, seqLen, snpinds
 
 def fasta_iter(fastaFileName, snpinds=None):
-    """
-    read fasta file, one entry at a time
-    :return  hed, seq_int, an iterator over fasta entries,
+    """Iterate over fasta file, converting seq to int.
+
+    Args:
+        fastaFileName: path of fasta file to summarize.
+    Keyword args:
+        snpinds: snp positions to keep in return array.
+    Yields:
+        tuple (hed, seq_int): an iterator over fasta entries.
     """
     hed = None
     with open(fastaFileName, "r") as fh:
@@ -92,35 +105,39 @@ def fasta_iter(fastaFileName, snpinds=None):
                 else:
                     yield (hed, seq2int(seq)[snpinds])
                     
-
 def seq2int(seq):
-    """
-    transform DNA sequences to int np.array
-    other bases like '-' or 'N' are set to 0
+    """Transform a DNA sequence to int np.array.
+
+    Sets other bases like '-' or 'N' to 0
+    
+    Args:
+        seq (str): string DNA sequence. 
+    Returns:
+        arr (numpy.array): len(seq) x 1 array
     """
     base = {'A': 1, 'C': 2, 'G': 3, 'T': 4, 'a': 1, 'c': 2, 'g': 3, 't': 4}
-    arr = np.zeros(len(seq), dtype='uint8')
-    
+    arr = np.zeros(len(seq), dtype='uint8') 
     for i, tb in enumerate(seq):
         if tb in base:
             arr[i] = base[tb]
     return arr
 
-
 def read_fasta(fastaFileName,snpflag=False):
-    """
-    :param fastaFileName: name of input fasta file
-    :return headers, seqAln: headers of sequences, sequence alignment in numpy np.array
+    """Read fasta file.
+
+    Args:
+        fastaFileName: name of input fasta file.
+    Returns:
+        headers: headers of sequences.
+        seqAln: sequence alignment in numpy.array.
     """
     nseq, seqLen, snpinds = count_fasta(fastaFileName,snpflag)
     seqAln = np.zeros((nseq,len(snpinds)), dtype='uint8')
     headers = list()
-
     for i,x in enumerate(fasta_iter(fastaFileName,snpinds)):
         hed, seq_int = x
         headers.append(hed)
         seqAln[i:]=seq_int
-
     return headers,seqAln
 
 #def is_snp(arr):
@@ -141,13 +158,17 @@ def read_fasta(fastaFileName,snpflag=False):
 #    raise Exception('input {} is too large (larger than uint64).\n'.format(n)) 
 
 def group_aln(seqAln, partition, datatype=None):
-    """
-    group alignment matrix into count matrix according to partition
-    :param seqAln, alignment matrix, nseq x nLoci
-           partition, nseq x 1
-    :return: count matrix, ngroup x nLoci x 4
-    """
-    
+    # JS: Currently unused in repo. What is this function for?
+    """Group alignment matrix into count matrix according to partition.
+
+    Args:
+        seqAln: nseq x nLoci matrix of aligned sequences.
+        partition: nseq x 1 matrix
+    Keyword args:
+        datatype: optionally specified datatype
+    Returns: 
+        cntAln: ngroup x nLoci x 4 count matrix
+    """ 
     baseDict = {1:0,2:1,3:2,4:3}
     partition = np.array(partition)
 
@@ -180,20 +201,30 @@ def group_aln(seqAln, partition, datatype=None):
     return cntAln
 
 def save_file(filename, obj):
+    """Pickle an object and write to file."""
     with open(filename, 'wb') as f:  # Python 3: open(..., 'wb')
         pickle.dump(obj, f)
 
 def load_file(filename):
+    """Load a pickled object from file."""
     with open(filename, 'rb') as f:  # Python 3: open(..., 'rb')
         obj = pickle.load(f)
         return obj
 
 def create_dir(input_dir):
+    """Create a directory at the specified location."""
     if not os.path.isdir(input_dir):
         os.mkdir(input_dir)
 
-# splite a list into n sublists
 def split_list(inList, nSubList):
+    """Split a list into nSubList approximately equally-sized sub-lists.
+
+    Args: 
+        inList: initial list.
+        nSubList: number of sub-lists.
+    Returns:
+        resList: a list of lists.        
+    """
     n = len(inList)
     pos = np.round(np.linspace(0,n,nSubList+1)).astype('int')
     resList = [[] for i in range(nSubList)]
@@ -202,6 +233,7 @@ def split_list(inList, nSubList):
     return resList
     
 
+# Import earlier? or split into files
 from multiprocessing import RawArray,Pool
 import multiprocessing as mp
 
@@ -209,6 +241,14 @@ varDict = {}  # global variable to be shared between processes
 
 # used to initialize each process
 def init_worker(dist_func, xiInfo, xjInfo, bmatInfo):
+    """Initialize worker process by filling global varDict.
+
+    Args:
+        dist_func: distance function used for computation.
+        xiInfo: tuple (xiPtr, xiType, xiShape)
+        xjInfo: tuple (xjPtr, xjType, xjShape)
+        bmatInfo: tuple (bmatPtr, bmatType, bmatShape)
+    """
 #    print('init_worker')
     varDict['dist_func'] = dist_func
     varDict['xiPtr'],varDict['xiType'],varDict['xiShape'] = xiInfo
@@ -217,12 +257,16 @@ def init_worker(dist_func, xiInfo, xjInfo, bmatInfo):
 
 # calculate the distance given shared matrixes, indList=[(1,2),(1,3),(3,4)]
 def cal_dist(indsList):
+    """Calculate distance between points of shared matrix, specified by indices in indsList.
+
+    Args:
+        indsList: list of tuples (i,j) specifying global coordinates.
+    """
 #    print('hello')
     dist_func = varDict['dist_func']
     xiPtr, xiType, xiShape = varDict['xiPtr'],varDict['xiType'],varDict['xiShape'] 
     xjPtr, xjType, xjShape = varDict['xjPtr'],varDict['xjType'],varDict['xjShape']
-    bmatPtr, bmatType, bmatShape = varDict['bmatPtr'],varDict['bmatType'],varDict['bmatShape']
-    
+    bmatPtr, bmatType, bmatShape = varDict['bmatPtr'],varDict['bmatType'],varDict['bmatShape'] 
     XI = np.frombuffer(xiPtr, dtype=xiType).reshape(xiShape)
     XJ = np.frombuffer(xjPtr, dtype=xjType).reshape(xjShape)
     bmat = np.frombuffer(bmatPtr, dtype=bmatType).reshape(bmatShape)
@@ -232,6 +276,7 @@ def cal_dist(indsList):
 
 # calculate the distance between block bi and block bj
 def cal_dist_block(outDir, bi, bj):
+    """Calculate the distance (in parallel) between data segments bi and bj, save to file in outDir."""
     # skip if result is ready
     if os.path.isfile(Constants.get_dist_block_file(bi,bj)):
         return
@@ -291,12 +336,32 @@ def cal_dist_block(outDir, bi, bj):
 
 # calculate distance matrix for all block pairs in the given batch
 def cal_dist_block_batch(outDir, batchList):
+    """Calculate distance matrix for specified pairs [(bi,bj)...]."""
     for bi,bj in batchList:
         cal_dist_block(outDir,bi,bj)
 
 
 #from server2 import Constants
 def preproc_fasta(fastaFileName, outDir,nMachine):
+    #! JS: does this function have too many responsibilities?
+    #! JS: e.g. initializing constants doesn't seem to be part
+    #! JS: of file preprocessing. 
+    #! JS: perhaps different language would improve clarity.
+    """Perform several pre-processing functions, convert .fasta to block data.
+
+    Create a directory, parse a fasta alignment,
+    initialize constants, pickle headers and dimension,
+    and finally save data in blocks.
+
+    Args:
+        fastFileName
+        outDir: destination directory to save data.
+        nMachine: number of machines used.
+    Returns:
+        (n,d):
+            n: number of sequences.
+            d: length of sequences.
+    """
 #if __name__=="__main__":
 #    fastaFileName = sys.argv[1]
 #    outDir = os.path.abspath(sys.argv[2])
@@ -347,6 +412,15 @@ def preproc_fasta(fastaFileName, outDir,nMachine):
 
 # cmdstr: GlobalServer, Server, BlockProcess
 def start_server(cmdstr,args):
+    #! JS: Is this safe?
+    """Create and initialize a server by calling a given function (cmdstr) and args.
+    
+    Args:
+        cmdstr: the name of a function to call that returns server.
+        args: arguments for function.
+    Returns:
+        server: server object.
+    """
     func=getattr(sys.modules['__main__'],cmdstr)
     server = func(*args)
 #    server.check_child_conns()   # might block regional server if local server on the same machine is not ready
@@ -355,6 +429,12 @@ def start_server(cmdstr,args):
         
 
 class FuncList:
+    """A class used to store and fetch functions.
+
+    Class attributes:
+        FUNC_NAME_LIST (list): a list of function names
+        FUNC_NAME_DICT (dict): a dictionary mapping function name: index 
+    """
     FUNC_NAME_LIST = ('f')
     FUNC_NAME_DICT = {}
     
@@ -381,7 +461,20 @@ class FuncList:
                 for i in range(len(cls.FUNC_NAME_LIST)) }
 
 class MinTurple:
+    """Class representing a tuple comprised of a pair of indices and their minimum values.
+   
+    Attributes:
+        mi (int): the first index
+        mj (int): the second index
+        minVal (constants.DATA_TYPE): the value of the pair (mi, mj)
+    """
     def __init__(self,mi,mj,minVal):
+        """
+        Args:
+            mi (int): the first index
+            mj (int): the second index
+            minVal (constants.DATA_TYPE): the value of the pair (mi, mj)
+        """
         self.mi = mi
         self.mj = mj
         self.minVal = minVal
@@ -401,26 +494,31 @@ class MinTurple:
             return self.minVal <= obj.minVal
 
 class Block:
-    '''
-    bmat   : bs x bs, block matrix, bs stands for block size
-    
-    browflag  : block row flag, indicate if an element deleted or not
-    bcolflag  : block column flag, indicate if an element deleted or not
-    
-    hedInd : bs x 1, index of min value in each row
-    hedVal : bs x 1, minimum value of each row
-    
-    bi     : block row index
-    bj     : block column index
-    
-    minInd : (ri, ci) row and col index of the minimum value in bmat
-    minHedVal : minimum value in bmat
-    
-    count   : number of elements in this block
-    '''
+    #! JS: should the block functions be taking global coordinates and translating them in every function?
+    """Represents a block matrix and associated variables.
+
+    Attributes:
+        bmat (np.array): bs x bs, block matrix, bs stands for block size
+        browflag (np.array): block row flag, indicate if an element deleted or not
+        bcolflag (np.array): block column flag, indicate if an element deleted or not
+        hedInd (np.array): bs x 1, index of min value in each row
+        hedVal (np.array): bs x 1, minimum value of each row
+        bi (int): block row index
+        bj (int): block column index 
+        minInd (tuple): (ri, ci) row and col index of the minimum value in bmat
+        minHedVal (constants.DATA_TYPE): minimum value in bmat 
+        count (int): number of elements in this block
+    """
     
     def __init__(self, bi, bj):
         assert(bi<=bj)
+        """Initialize Block with two indices, loading block data from file.
+
+        Args:
+            bi (int): first index
+            bj (int): second index
+        """
+
 #        self.bmat = np.zeros((Constants.BLOCK_SIZE,Constants.BLOCK_SIZE),dtype=Constants.DATA_TYPE)
 #        self.bmat = np.zeros((Constants.BLOCK_SIZE,Constants.BLOCK_SIZE), dtype=Constants.DATA_TYPE)
 #        self.cal_dist_block(bi,bj)  
@@ -466,6 +564,7 @@ class Block:
     
     # return a tuple that is the minimum, should be call when minHedVal is not DEL_VAL
     def get_min_tuple(self):
+        """Calculate and return the tuple with minimum value."""
         if self.minHedVal==Constants.DEL_VAL:
             delval = Constants.DEL_VAL
             return MinTurple(delval,delval,delval)
@@ -481,10 +580,10 @@ class Block:
             return True
         else:
             return self.minHedVal <= obj.minHedVal
-            
-    
+             
     # extract the block portion of global row xi, delete row xi at the same time
     def extract_row(self,xi):
+        """Extract a segment of global row xi from this block."""
         xbi,xii = Constants.getbi(xi)
         if self.bi<xbi and self.bj==xbi:
             return self.bmat[:,xii]
@@ -499,6 +598,7 @@ class Block:
         
     # assign the block portion of global row xi
     def assign_row(self,xi,arr):
+        """Assign a row of this block corresponding to global row xi."""
         assert len(arr)==Constants.BLOCK_SIZE
         xbi,xii = Constants.getbi(xi)
         if self.bi<xbi and self.bj==xbi:
@@ -513,6 +613,11 @@ class Block:
         
     # update hedInd and hedVal for block row i    
     def update_head(self,i):
+        """Find the minimum j and value for row (point) i.
+
+        Args:
+            i: local index specifying data element.
+        """
         if not self.browflag[i]:
             self.hedInd[i] = Constants.DEL_VAL
             self.hedVal[i] = Constants.DEL_VAL
@@ -532,6 +637,12 @@ class Block:
     
     # update hedInd and hedVal for index (block) in batch, batch is iterable
     def update_batch_head(self,batch,minFlag=True):
+        """Call update_head for a list of indices.
+        
+        Args:
+            batch: list of indices.
+            minFlag (bool): whether or not to update_min_head.    
+        """
         for i in batch:
             self.update_head(i)
         if minFlag:
@@ -539,6 +650,7 @@ class Block:
                 
     # update minInd, minHedVal
     def update_min_head(self):
+        """Find the row i with the closest neighbor j."""
         if self.count<=0:
             assert not any(self.browflag)
             self.minHedVal = Constants.DEL_VAL
@@ -553,6 +665,8 @@ class Block:
                     
     # delete row xi in the global matrix, update browflag, bcolflag, 
     def delete_row(self,xi):
+        """Delete global row xi from the block and update_batch_head."""
+        #! JS: both deletes and updates. Is this too much responsibility?
         xbi,xii = Constants.getbi(xi)
         if self.bi<xbi and self.bj==xbi:
             self.bcolflag[xii]=False
@@ -572,6 +686,9 @@ class Block:
             
     # insert row xi (global matrix), browflag: from global flag matrix
     def insert_row(self,xi):
+        #! JS: does this insert anything? Seems to update not insert.
+        #! JS: perhaps different language would improve clarity.
+        """Call update_batch_head for row xi."""
         xbi,xii = Constants.getbi(xi)
         if self.bi<xbi and self.bj==xbi:
             self.update_batch_head(range(Constants.BLOCK_SIZE))
@@ -583,9 +700,39 @@ class Block:
             pass
 
 class Server(Process):
+    """Generic server class for managing connections, blocks, sending commands to workers.
+    
+    Attributes:
+        logger: logging.Logger object.
+        parentConn: Client object connected to parent server.
+        blockFlag: array of length N_BLOCK; 1 if activate 0 if deleted.
+        serverName: name of server.
+        server: Listener object for listening to connections.
+        nChild: the number of child connections.
+        childConns: child connections.
+        childBlockList: list of blocks belonging to each child.
+        minVal: minVal of all children.
+        childUpdateFlagArr: boolean array of length nChild indicating whether updating is required                     
+    """
     def __init__(self, parentConn=None, parentAddress=None, authKey=None,
                  serverAddress=None, serverName=None,
                  nChild=0, childConns=[], childBlockList=[], logFile=None):
+        #! JS: ChildConns is never supplied during init in the repo so far,
+        #! JS: but empty values are supplied for initialization in subclasses.
+        #! JS: Does this need to be like this?
+        """Initialize with (optional) parent and child connections.
+
+        Args:
+            parentConn: Client object connected to parent server.
+            parentAddress: address of parent server.
+            authkey: authentication key.
+            serverAddress: address of this server.
+            serverName: name of this server.
+            nChild: number of child connections.
+            childConns: optionally provided child connections.
+            childBlockList: list of blocks for each child.
+            logFile: file to write logs.
+        """
         super().__init__(name=serverName)
         
         # create logger, each process must have its own log file
@@ -636,6 +783,7 @@ class Server(Process):
         self.childUpdateFlagArr = np.ones(nChild, dtype=bool) # if any updates applied to child, important for getting minval
     
     def setup_child_conns(self, pconn):
+        """Accept nChild connections with self.server, send result to pconn."""
         self.log('debug',f'Starting child connections for {self.serverName}')
         res = []
         for i in range(self.nChild):
@@ -645,9 +793,15 @@ class Server(Process):
         self.server.close()  # stop accepting new connections from children
         pconn.send(res)
         pconn.close()
-        
-    
+         
     def check_child_conns(self):
+        """..."""
+        #! JS: in what way does this check child connections?
+        #! JS: defines .childConns via result that was sent to ._conn
+        #! JS: down .pconn
+        #! JS: does join ._proc that is building the child connections
+        #! JS: does close ._conn used to setup child connections
+        #! JS: seemingly finalizes child connection setup
         if self._conn:
             self.childConns = self._conn.recv()
             self._proc.join()
@@ -655,6 +809,13 @@ class Server(Process):
     
     # different child servers may connect at different time, the order of childBlockList is thus changed
     def update_child_block_list(self):
+        """Request children update block list.
+            
+            Returns:
+                A concatenation of lists in self.childBlockList.
+        """
+        #! JS: Sets self.childBlockList as well; presumably the return
+        #! JS: value indicates all blocks that were updated
         for i in range(self.nChild):
             self.childConns[i].send(['update_child_block_list',])
         for i in range(self.nChild):
@@ -662,8 +823,7 @@ class Server(Process):
             if res!=self.childBlockList[i]:
                 self.log('debug','childBlockList[{i}] updated. origChildBlockList[{i}]={childBlockList[i]}, new={res}')
                 self.childBlockList[i] = res
-        return reduce((lambda x,y: x+y),self.childBlockList)
-        
+        return reduce((lambda x,y: x+y),self.childBlockList) 
     
     # check if the given blist contains bi
     # blist is a list consisting block index, e.g. [(1,3),(3,5)]
@@ -676,6 +836,7 @@ class Server(Process):
     
     # remove all blocks related with bi from the block list both for the parent and children
     def del_blocks(self,bi):
+        """Delete block bi and request children do the same."""
         for i in range(self.nChild):
             if self.contain_bi(self.childBlockList[i],bi):
                 self.childConns[i].send(['del_blocks',bi])
@@ -692,6 +853,7 @@ class Server(Process):
     
     # get the minimum value from all blocks in the dictionary
     def get_min(self):
+        """Request children get current minimum and return min of these."""
         if not any(self.childUpdateFlagArr):
             self.log('debug',f'No update made in this server, return current minval.')
             return self.minval
@@ -710,6 +872,17 @@ class Server(Process):
     
     # extract xith row
     def ex_row(self, xi, delFlag=False):
+        """Extract row xi of the entire matrix, retrieving sections from children.
+        
+        Args:
+            xi (int): global matrix row index
+            delFlag (bool): whether to also flag children for updating via childUpdateFlagArr.
+        """
+        #! JS: when ii and jj are merged, jj is to be deleted. So the flag is true for jj.
+        #! JS: perhaps a seperate function would be better, to send the deletion request separately.
+        #! JS: delFlag does not actually indicate deletion.
+        #! JS: delFlag is only used to indicate if minVal needs to be recomputed for any children when it is requested. 
+        #! JS: perhaps different language would improve clarity.
         bi,ii = Constants.getbi(xi)
         self.log('debug',f'Extract row xi={xi}, bi={bi} ii={ii}')
         
@@ -725,6 +898,12 @@ class Server(Process):
         return res
     
     def ins_row(self, xi, segList):
+        """Request that child nodes insert row.
+        
+        Args:
+            xi (int): global matrix row index
+            segList: a list of tuples (bi,bj,arr)
+        """
         bi,ii = Constants.getbi(xi)
         self.log('debug',f'Insert row xi={xi}, bi={bi} ii={ii}')
         self.log('debug',f'Insert row xi={xi}, segList={segList}')
@@ -751,10 +930,17 @@ class Server(Process):
 
     
     def perform_task(self,cmd,args):
+        """Retrieves and calls a function with name cmd and args."""
         self.log('debug',f'in perform task cmd={cmd} args={args}' )
         return getattr(self, cmd)(*args)  # cmd in string, args are python objects
     
     def log(self,level,infoStr):
+        """Record infoStr in log at specified level.
+
+        Args:
+            level (str): debugging level
+            infoStr (str): string to record in log
+        """
         if not self.logger:
             return
         if level=='debug':
@@ -768,6 +954,7 @@ class Server(Process):
             self.logger.error(infoStr)
     
     def close(self):
+        """Request children stop, end parent connection."""
         for conn in self.childConns:
             try:
                 conn.send(['STOP',])
@@ -791,6 +978,7 @@ class Server(Process):
         
     # reiceive cmd from parent, excute it, suspend
     def exec_task(self):
+        """Receive a command from parent, execute it, and suspend until iteration."""
         cmdarr = self.parentConn.recv()
         self.log('debug','received command data {cmdarr}.')
         cmd = cmdarr[0]
@@ -809,31 +997,67 @@ class Server(Process):
                 return
             
 class BlockProcess(Server):
+    """BlockProcess server class for operating directly on blocks.
+
+    Attributes:
+        block: Block object
+    """
 #    def __init__(self, parentConn=None, parentAddress=None, authKey=None, serverName=None, blockIndex=None, logFile=None):
 #        super().__init__(parentConn=parentConn, parentAddress=parentAddress, authKey=authKey, serverName=serverName, logFile=logFile)
 #        
 #        ######### special for block process ###########
 #        self.block=Block(blockIndex[0],blockIndex[1])
     def __init__(self, parentConn=None, serverName=None, blockIndex=None, logFile=None):
+        """Initialize with optional server connection to parent.
+
+        Keyword args:
+            parentConn: connection to parent.
+            serverName: name of this server.
+            blockIndex: index of contained block.
+            logFile: file to which logs are written.
+        """
         super().__init__(parentConn=parentConn, serverName=serverName, logFile=logFile)
         
         ######### special for block process ###########
         self.block=Block(blockIndex[0],blockIndex[1])
         
     def update_child_block_list(self):
+        """Fetches a list of one element, the (bi,bj) tuple."""
+        # JS: in what way does this update? 
+        # JS: if this is the implementation of an interface,
+        # JS: for which there needs to be a base case that does nothing,
+        # JS: why not define that base case in the superclass,
+        # JS: and make specific methods for each subclass?
+        # JS: instead we make complex and uninitive overrides of
+        # JS: default behaviour.
+        # JS: or, if we have at the terminal global layer, a 
+        # JS: requirement to get block bi,bj,
+        # JS: why transmit the message update_child_block_list
+        # JS: why not just ask for block bi and bj then and there?
+        # JS: this seems very fragile and impedes reading.
         return [(self.block.bi,self.block.bj)]
     
     def del_blocks(self,bi):
+        """Log that block bi has been deleted, report None to parent."""
+        # JS: see above comments.
         self.log('debug','block (%d,%d) deleted.' % (self.block.bi,self.block.bj))
         self.parentConn.send(None)
         self.log('debug','Block process (%d,%d) closed.' % (self.block.bi,self.block.bj))
         self.close()
     
     def get_min(self):
+        """Gets the stored block's min tuple (mi,mj,d)."""
+        # JS: see above comments.
         self.log('debug','minimal value in block (%d,%d) is %s.' % (self.block.bi, self.block.bj, str(self.block.get_min_tuple()) ))
         return self.block.get_min_tuple()
     
     def ex_row(self, xi, delFlag=False):
+        """Extracts row xi from stored block.
+
+        Args:
+            xi (int): global row index xi.
+            delFlag (bool): whether to also delete the row xi !!!
+        """
         arr = self.block.extract_row(xi)
         assert arr is not None
         if delFlag:
@@ -844,6 +1068,12 @@ class BlockProcess(Server):
         return [(k,arr)]
     
     def ins_row(self, xi, segList):
+        """Inserts row xi with data contained in segList.
+        
+        Args:
+            xi (int): global row index xi.
+            segList: list containing a single element (index, array)!!!
+        """
         assert(len(segList)==1)
         ind,arr = segList[0]
         assert(self.block.bi==ind[0] and self.block.bj==ind[1])
@@ -853,9 +1083,32 @@ class BlockProcess(Server):
         return None
 
 class GlobalServer(Server):
+    """GlobalServer class for delegating work to rest of the network.
+    
+    Attributes:
+        blockFlag: N_BLOCK x 1 np.array specifying active blocks.
+        veci: N_BLOCK*BLOCK_SIZE x 1 np.array representing a row i.
+        vecj: N_BLOCK*BLOCK_SIZE x 1 np.array representing a row j.
+        mati: N_BLOCK x BLOCK_SIZE np.array representing reshaped veci.
+        matj: N_BLOCK x BLOCK_SIZE np.array representing reshaped vecj.
+    """
     def __init__(self, parentConn=None, parentAddress=None, authKey=None, 
                  serverAddress=None, serverName=None, 
                  nChild=0, childConns=[], childBlockList=[], logFile=None, globalArgs=None):
+        """Initialize server superclass.
+            
+        Args:
+            parentConn: connection to parent.
+            parentAddress: address of parent.
+            authKey: authentication key.
+            serverAddress: address of this server.
+            serverName: name of this server.
+            nChild: number of child servers.
+            childConns: child server connections.
+            childBlockList: blocks belonging to children.
+            logFile: file to write logs.
+            globalArgs: tuple (veciPtr, vecjPtr, blockFlagPtr)
+        """
         super().__init__(parentConn=parentConn, parentAddress=parentAddress, authKey=authKey, 
              serverAddress=serverAddress, serverName=serverName,
              nChild=nChild, childConns=childConns, childBlockList=childBlockList, logFile=logFile)
@@ -870,6 +1123,13 @@ class GlobalServer(Server):
     
     # extract xith row
     def ex_row(self, xi, matistr, delFlag=False):
+        """Extract row xi from mati or matj.
+
+        Args:
+            xi (int): global row index.
+            matistr (str): string indicating mati or matj
+            delFlag (bool): flag indicating whether to also delete (j in i-j merger)
+        """
         res = super().ex_row(xi,delFlag)
         bi,ii = Constants.getbi(xi)
         
@@ -879,6 +1139,13 @@ class GlobalServer(Server):
         return None
 #        return mati
     def ins_row(self, xi, matistr):
+        """Insert row xi into mati or matj.
+    
+        Args:
+            xi (int): global row index.
+            matistr (str): string indicating mati or matj.
+            delFlag (bool): flag indicating whether to also delete.
+        """
         bi,ii = Constants.getbi(xi)
         mati = getattr(self,matistr)
         segList = []
@@ -892,8 +1159,22 @@ class GlobalServer(Server):
         return None
 
 class LocalServer(Server):
+    """LocalServer class, one per machine."""
     def __init__(self, parentConn=None, parentAddress=None, authKey=None, 
                  serverName=None, nChild=0, childBlockList=None, logFile=None):
+        """Call server superclass initialization, start memMonitor, start BlockProcess children."
+            
+        Args:
+            parentConn: connection to parent.
+            parentAddress: address of parent.
+            authKey: authentication key.
+            serverAddress: address of this server.
+            serverName: name of this server.
+            nChild: number of child servers.
+            childBlockList: blocks belonging to children.
+            logFile: file to write logs.
+        """
+
         super().__init__(parentConn=parentConn, parentAddress=parentAddress, authKey=authKey, 
              serverName=serverName, nChild=0, childBlockList=None, logFile=logFile)
         # get connections from children
@@ -919,6 +1200,7 @@ class LocalServer(Server):
             bp.start()
             
     def close(self):
+        """Terminate memMonitor and close server."""
         if self.memMonitor:
             self.memMonitor.terminate()
         super().close()
@@ -926,6 +1208,25 @@ class LocalServer(Server):
 
 import ctypes as ct
 class Constants:
+    """Constants class to store global variables used by most functions.
+
+    Attributes:
+        DATA_TYPE: type stored in data matrix e.g. uint16.
+        CTYPE: ctypes version of DATA_TYPE.
+        TYPE_TBL: table translating data type to ctype type.
+        DEL_VAL: value representing deleted nodes.
+        BLOCK_SIZE: size of a block.
+        N_BLOCK: number of blocks.
+        N_NODE: number of data points (nodes in a tree).
+        MINOR_ALLELE_FREQ: threshold frequency above which an allele is called.
+        OUT_DIR: directory to which output tree is written.
+        DATA_FILE_NAME: file name of the data (e.g. fasta file path).
+        DATA_DIR: directory where the data is stored.
+        DIST_DIR: 
+        LOG_DIR: directory where logs are written
+        DIST_FUNC: the function used to compute distances between points.
+        nMaxProcPerMachine: the maximum number of processes launched per machine.
+    """
 
     # store all relevant constants
     DATA_TYPE = 'uint16'
@@ -953,6 +1254,19 @@ class Constants:
     
     @classmethod
     def init(cls, n, xlen, datafile, outdir, nMachine, nBlock=None, distopt='Hamming'):
+        """Initialize with basic constants, compute derived constants.
+
+        Args:
+            n (int): number of data points.
+            xlen (int): length of each data point (vector dimension).
+            datafile: filename of base data.
+            outdir: name of directory where output files are generated.
+            nMachine: number of machines in network.
+
+        Keyword args:
+            nBlock: optionally specified number of blocks. Otherwise calculated.
+            distopt: distance function.
+        """
         cls.N_NODE = n
         assert(n*(n+1)>10*nMachine)
         
@@ -992,6 +1306,7 @@ class Constants:
     
     @staticmethod
     def get_data_type(n):
+        """Computes type required to store n"""
         for i in (8,16,32,64):
             if n<(1<<i):
                 return f'uint{i}'
@@ -999,6 +1314,7 @@ class Constants:
     
     @classmethod
     def choose_data_bits(cls,n):
+        """Computes bits required to store n."""
         for i in (16,32,64):
             if n<((1<<i)-3):
                 return i
@@ -1006,16 +1322,19 @@ class Constants:
             
     @classmethod    
     def getbi(cls,i):
+        """Converts global index to local block index."""
         bi = i//cls.BLOCK_SIZE
         ii = i%cls.BLOCK_SIZE
         return (bi,ii)
     
     @classmethod
     def getmi(cls,bi,ii):
+        """Converts local block index to global index."""
         return bi*cls.BLOCK_SIZE+ii
     
     @classmethod
     def get_block_inds(cls,bi):
+        """Retrieves all global indices for a given block."""
         if bi==Constants.N_BLOCK-1:
             return np.arange(cls.getmi(bi,0),cls.N_NODE)
         else:
@@ -1023,6 +1342,7 @@ class Constants:
     
     @classmethod
     def mymin(cls,vec):
+        """Retrieves minimum of a vec excluding DEL_VAL."""
         inds = np.where(vec!=cls.DEL_VAL)[0]
         tminind = np.argmin(vec[inds])
         minind = inds[tminind]
@@ -1031,26 +1351,45 @@ class Constants:
     
     @classmethod
     def get_input_data(cls):
+        """Load and return numpy file specified by constant cls.DATA_FILE_NAME."""
         return np.load(cls.DATA_FILE_NAME)
     
     @classmethod
     def get_dist_block_file(cls, bi, bj):
+        """Get file path string of block bi, bj."""
         return os.path.join(cls.OUT_DIR, cls.DIST_DIR, str(bi), f'd{bi}-{bj}.npy')
     
     @classmethod
     def get_data_block_file(cls,bi):
+        """Get file path string of data file bi."""
         return os.path.join(cls.OUT_DIR, cls.DATA_DIR, f'X-{bi}.npy')  
     
     @classmethod
     def get_log_file(cls,file):
+        """Get file path string of log file.
+        
+        Args:
+            file: log file name
+        """
         return os.path.join(cls.OUT_DIR, cls.LOG_DIR, f'{file}.txt')
     
     @classmethod
     def get_res_file(cls,file):
+        """Get file path string of results file. Are these getting file paths???"""
         return os.path.join(cls.OUT_DIR, file)
     
     @classmethod
     def get_conn_vars(cls):
+        """Get variables used for all connections.
+        
+        Returns:
+            initPort: ???
+            gPort: global server port.
+            rPort: regional server port.
+            lPort: local server port.
+            authkey: authentication key.
+        """
+        # JS: What is the regional server, explicitly? Why do the rest have classes but not the regional server?
         initPort = 16000
         gPort = 16005   # port for gloabl server
         rPort = 16010   # port for regional server
@@ -1060,6 +1399,11 @@ class Constants:
     
     @classmethod
     def get_dist_func(cls,distopt):
+        """Get distance function given a string.
+            
+            Args:
+                distopt (str): string specifying distance function, either 'Hamming' or 'Euclidean'
+        """
         if distopt=='Hamming':
             return cls.dist_hamming
         elif distopt=='Euclidean':
