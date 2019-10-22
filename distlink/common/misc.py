@@ -11,7 +11,6 @@ import logging
 loggingFormatter = logging.Formatter('%(asctime)s - %(processName)s - %(levelname)s - %(message)s')
 loggingLevel = logging.INFO  # logging.DEBUG, logging.INFO, logging.WARNING
 
-varDict = {}  # global variable to be shared between processes
 
 def disp_usage(log_func):
     """Calculate cpu and memory usage and supply to arg function log_func."""
@@ -207,22 +206,6 @@ def split_list(inList, nSubList):
         resList[i] = inList[pos[i]:pos[i+1]]
     return resList
     
-# used to initialize each process
-def init_worker(dist_func, xiInfo, xjInfo, bmatInfo):
-    """Initialize worker process by filling global varDict.
-
-    Args:
-        dist_func: distance function used for computation.
-        xiInfo: tuple (xiPtr, xiType, xiShape)
-        xjInfo: tuple (xjPtr, xjType, xjShape)
-        bmatInfo: tuple (bmatPtr, bmatType, bmatShape)
-    """
-    varDict['dist_func'] = dist_func
-    varDict['xiPtr'],varDict['xiType'],varDict['xiShape'] = xiInfo
-    varDict['xjPtr'],varDict['xjType'],varDict['xjShape'] = xjInfo
-    varDict['bmatPtr'],varDict['bmatType'],varDict['bmatShape'] = bmatInfo
-
-
 #from server2 import Constants
 def preproc_fasta(fastaFileName, outDir,nMachine):
     #! JS: does this function have too many responsibilities?

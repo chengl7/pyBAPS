@@ -12,9 +12,32 @@ from multiprocessing.connection import Client
 
 import numpy as np
 
-from local import LocalServer
-from block import Block, BlockProcess
 from common.constants import Constants
+from common.misc import split_list
+from common.misc import start_server
+import pickle
+import os
+
+from multiprocessing import RawArray
+from multiprocessing import Pool
+
+varDict = {}  # global variable to be shared between processes
+
+# used to initialize each process
+def init_worker(dist_func, xiInfo, xjInfo, bmatInfo):
+    """Initialize worker process by filling global varDict.
+
+    Args:
+        dist_func: distance function used for computation.
+        xiInfo: tuple (xiPtr, xiType, xiShape)
+        xjInfo: tuple (xjPtr, xjType, xjShape)
+        bmatInfo: tuple (bmatPtr, bmatType, bmatShape)
+    """
+    # JS: is this named  correctly? Does it initialize a worker?
+    varDict['dist_func'] = dist_func
+    varDict['xiPtr'],varDict['xiType'],varDict['xiShape'] = xiInfo
+    varDict['xjPtr'],varDict['xjType'],varDict['xjShape'] = xjInfo
+    varDict['bmatPtr'],varDict['bmatType'],varDict['bmatShape'] = bmatInfo
 
 def load_file(filename):
     """Load a pickled object from file."""

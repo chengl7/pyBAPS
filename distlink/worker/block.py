@@ -1,5 +1,6 @@
 import numpy as np
-from common.constants import constants
+from common.constants import Constants
+from common.misc import MinTurple
 from common.server import Server
 
 class Block:
@@ -20,13 +21,13 @@ class Block:
     """
     
     def __init__(self, bi, bj):
-        assert(bi<=bj)
         """Initialize Block with two indices, loading block data from file.
 
         Args:
             bi (int): first index
             bj (int): second index
         """
+        assert(bi<=bj)
         self.bmat = np.load(Constants.get_dist_block_file(bi,bj))
         
         self.browflag = np.ones(Constants.BLOCK_SIZE, dtype=bool)

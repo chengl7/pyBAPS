@@ -41,6 +41,7 @@ class GlobalServer(Server):
     def __init__(self, parentConn=None, parentAddress=None, authKey=None, 
                  serverAddress=None, serverName=None, 
                  nChild=0, childConns=[], childBlockList=[], logFile=None, globalArgs=None):
+        # JS: dangerous empty lists
         """Initialize server superclass.
             
         Args:
@@ -57,9 +58,7 @@ class GlobalServer(Server):
         """
         super().__init__(parentConn=parentConn, parentAddress=parentAddress, authKey=authKey, 
              serverAddress=serverAddress, serverName=serverName,
-             nChild=nChild, childConns=childConns, childBlockList=childBlockList, logFile=logFile)
-        
-        veciPtr,vecjPtr,blockFlagPtr = globalArgs
+             nChild=nChild, childConns=childConns, childBlockList=childBlockList, logFile=logFile) 
         
         self.blockFlag = np.frombuffer(blockFlagPtr, dtype=bool)
         self.veci = np.frombuffer(veciPtr, dtype=Constants.DATA_TYPE)
@@ -79,9 +78,9 @@ class GlobalServer(Server):
         res = super().ex_row(xi,delFlag)
         bi,ii = Constants.getbi(xi)
         
-        mati = getattr(self,matistr)        
+        matk = getattr(self,matistr)        
         for k,arr in res:
-            mati[k,:] = arr
+            matk[k,:] = arr
         return None
 
     def ins_row(self, xi, matistr):
@@ -93,16 +92,17 @@ class GlobalServer(Server):
             delFlag (bool): flag indicating whether to also delete.
         """
         bi,ii = Constants.getbi(xi)
-        mati = getattr(self,matistr)
+        matk = getattr(self,matistr)
         segList = []
         for k in range(bi):
             if self.blockFlag[k]:
-                segList.append(((k,bi),mati[k,:]))
+                segList.append(((k,bi),matk[k,:]))
         for k in range(bi,Constants.N_BLOCK):
             if self.blockFlag[k]:
-                segList.append(((bi,k),mati[k,:]))
+                segList.append(((bi,k),matk[k,:]))
         super().ins_row(xi, segList)
         return None
+
             
 def core_algo(origConn, veci, vecj, mati, matj, nodeFlag, blockCount, blockFlag):
     """Build a complete linkage tree.
