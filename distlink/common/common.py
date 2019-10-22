@@ -13,8 +13,6 @@ loggingLevel = logging.INFO  # logging.DEBUG, logging.INFO, logging.WARNING
 
 varDict = {}  # global variable to be shared between processes
 
-#from multiprocessing import Process
-
 def disp_usage(log_func):
     """Calculate cpu and memory usage and supply to arg function log_func."""
     cp = psutil.cpu_percent()
@@ -51,8 +49,6 @@ def count_fasta(fastaFileName, snpflag=False):
     baseCntMat = []
     with open(fastaFileName, "r") as fh:
         for k, x in groupby(fh, lambda line: line[0] == ">"):
-#           True <itertools._grouper object at 0x105121908>
-#           False <itertools._grouper object at 0x105121940>
             # header
             if k:
                 nSeq += 1
@@ -221,7 +217,6 @@ def init_worker(dist_func, xiInfo, xjInfo, bmatInfo):
         xjInfo: tuple (xjPtr, xjType, xjShape)
         bmatInfo: tuple (bmatPtr, bmatType, bmatShape)
     """
-#    print('init_worker')
     varDict['dist_func'] = dist_func
     varDict['xiPtr'],varDict['xiType'],varDict['xiShape'] = xiInfo
     varDict['xjPtr'],varDict['xjType'],varDict['xjShape'] = xjInfo
@@ -249,28 +244,17 @@ def preproc_fasta(fastaFileName, outDir,nMachine):
             n: number of sequences.
             d: length of sequences.
     """
-#if __name__=="__main__":
-#    fastaFileName = sys.argv[1]
-#    outDir = os.path.abspath(sys.argv[2])
-#    fastaFileName = 'seq.fa'
-#    outDir = 'test'
-    
+   
     create_dir(outDir)
     
     # cut the alignment into chucks
-#    headers,seqAln = read_fasta(fastaFileName,snpflag=True)
     headers= None
     seqAln = np.load(fastaFileName)
-#    seqAln = np.random.random((206,10))  # for testing purposes
     
     
     n,d = seqAln.shape
-#    Constants.init(n,d)
     Constants.init(n,d,fastaFileName,outDir,nMachine)
     
-    # create subdirectories
-#    dataDir = 'data'
-#    distDir = 'dist'
     dataDir = Constants.DATA_DIR
     distDir = Constants.DIST_DIR
     logDir = Constants.LOG_DIR
@@ -290,14 +274,6 @@ def preproc_fasta(fastaFileName, outDir,nMachine):
     
     return (n,d)
     
-#    cal_dist_block(outDir, 14, 14)
-#    for bi in range(Constants.N_BLOCK):
-#        for bj in range(bi,Constants.N_BLOCK):
-#            cal_dist_block(outDir, bi, bj)
-#    batchList = [(bi,bj) for bi in range(Constants.N_BLOCK) for bj in range(bi,Constants.N_BLOCK)]  
-#    cal_dist_block_batch(outDir,batchList)
-
-# cmdstr: GlobalServer, Server, BlockProcess
 def start_server(cmdstr,args):
     #! JS: Is this safe?
     """Create and initialize a server by calling a given function (cmdstr) and args.
@@ -310,10 +286,7 @@ def start_server(cmdstr,args):
     """
     func=getattr(sys.modules['__main__'],cmdstr)
     server = func(*args)
-#    server.check_child_conns()   # might block regional server if local server on the same machine is not ready
-    return server
-#    server.start()
-        
+    return server        
 
 class FuncList:
     """A class used to store and fetch functions.
