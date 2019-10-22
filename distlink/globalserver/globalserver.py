@@ -13,8 +13,9 @@ from multiprocessing.connection import Listener, Pipe
 
 from itertools import chain
 
-from common import disp_usage_forever, Constants
-from globalserver import GlobalServer
+from common.misc import disp_usage_forever
+from common.constants import Constants
+from common.server import Server
 
 import logging
 loggingFormatter = logging.Formatter('%(asctime)s - %(processName)s - %(levelname)s - %(message)s')
@@ -23,8 +24,85 @@ logging.basicConfig(level=loggingLevel,format='%(asctime)s - %(processName)s - %
 logger = logging.getLogger(__name__)
 
 # to be used by the GlobalServer process
-# JS: do we need globals?
+# JS: do we need globals? 
+# JS: these globals only in this file now
 global blockFlagPtr, veciPtr, vecjPtr
+
+class GlobalServer(Server):
+    """GlobalServer class for delegating work to rest of the network.
+    
+    Attributes:
+        blockFlag: N_BLOCK x 1 np.array specifying active blocks.
+        veci: N_BLOCK*BLOCK_SIZE x 1 np.array representing a row i.
+        vecj: N_BLOCK*BLOCK_SIZE x 1 np.array representing a row j.
+        mati: N_BLOCK x BLOCK_SIZE np.array representing reshaped veci.
+        matj: N_BLOCK x BLOCK_SIZE np.array representing reshaped vecj.
+    """
+    def __init__(self, parentConn=None, parentAddress=None, authKey=None, 
+                 serverAddress=None, serverName=None, 
+                 nChild=0, childConns=[], childBlockList=[], logFile=None, globalArgs=None):
+        """Initialize server superclass.
+            
+        Args:
+            parentConn: connection to parent.
+            parentAddress: address of parent.
+            authKey: authentication key.
+            serverAddress: address of this server.
+            serverName: name of this server.
+            nChild: number of child servers.
+            childConns: child server connections.
+            childBlockList: blocks belonging to children.
+            logFile: file to write logs.
+            globalArgs: tuple (veciPtr, vecjPtr, blockFlagPtr)
+        """
+        super().__init__(parentConn=parentConn, parentAddress=parentAddress, authKey=authKey, 
+             serverAddress=serverAddress, serverName=serverName,
+             nChild=nChild, childConns=childConns, childBlockList=childBlockList, logFile=logFile)
+        
+        veciPtr,vecjPtr,blockFlagPtr = globalArgs
+        
+        self.blockFlag = np.frombuffer(blockFlagPtr, dtype=bool)
+        self.veci = np.frombuffer(veciPtr, dtype=Constants.DATA_TYPE)
+        self.vecj = np.frombuffer(vecjPtr, dtype=Constants.DATA_TYPE)
+        self.mati = self.veci.reshape((Constants.N_BLOCK,Constants.BLOCK_SIZE))
+        self.matj = self.vecj.reshape((Constants.N_BLOCK,Constants.BLOCK_SIZE))
+    
+    # extract xith row
+    def ex_row(self, xi, matistr, delFlag=False):
+        """Extract row xi from mati or matj.
+
+        Args:
+            xi (int): global row index.
+            matistr (str): string indicating mati or matj
+            delFlag (bool): flag indicating whether to also delete (j in i-j merger)
+        """
+        res = super().ex_row(xi,delFlag)
+        bi,ii = Constants.getbi(xi)
+        
+        mati = getattr(self,matistr)        
+        for k,arr in res:
+            mati[k,:] = arr
+        return None
+
+    def ins_row(self, xi, matistr):
+        """Insert row xi into mati or matj.
+    
+        Args:
+            xi (int): global row index.
+            matistr (str): string indicating mati or matj.
+            delFlag (bool): flag indicating whether to also delete.
+        """
+        bi,ii = Constants.getbi(xi)
+        mati = getattr(self,matistr)
+        segList = []
+        for k in range(bi):
+            if self.blockFlag[k]:
+                segList.append(((k,bi),mati[k,:]))
+        for k in range(bi,Constants.N_BLOCK):
+            if self.blockFlag[k]:
+                segList.append(((bi,k),mati[k,:]))
+        super().ins_row(xi, segList)
+        return None
             
 def core_algo(origConn, veci, vecj, mati, matj, nodeFlag, blockCount, blockFlag):
     """Build a complete linkage tree.
@@ -322,7 +400,6 @@ def setup_3layer_network(nMachine, globalHostName, initHostArr, initConnArr):
     for i in range(nMachine):
         initConnArr[i].recv()
     
-#    globalServer.check_child_conns()  # ensure child connections are ready
     globalServer.start()              # run core algorithm
     return (origConn,globalServer)
 
@@ -334,10 +411,9 @@ def parse_input(args):
     inputFiles = args[3::2]
     outDirs = args[4::2]
     return (nMachine, globalHostName, inputFiles, outDirs)
-
-from common_base import preproc_fasta, split_list
     
 if __name__=="__main__":
+    from common_base import preproc_fasta, split_list
     """Setup network and execute core linkage algorithm."""
     
     ## part 1: parse input, start memory monitor, set up initial connections 

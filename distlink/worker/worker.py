@@ -12,8 +12,9 @@ from multiprocessing.connection import Client
 
 import numpy as np
 
-from local import LocalServer, Block, BlockProcess
-from common import Constants
+from local import LocalServer
+from block import Block, BlockProcess
+from common.constants import Constants
 
 def load_file(filename):
     """Load a pickled object from file."""
