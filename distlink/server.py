@@ -184,6 +184,11 @@ def setup_network(nMachine, globalHostName, initHostArr, initConnArr):
         initHostArr: addresses of connections to initialization global server.
         initConnArr: connections to initialization global server.
     """
+    # JS: The network configuration seems to have some generalizability
+    # JS: but also require 2 or 3 layer networks to be explicitly specified.
+    # JS: This perhaps hinders clarity.
+    # JS: Perhaps the network should be N-layer (generalized) or 
+    # JS: be explicit for clarity.
     if nMachine<30:
         origConn,globalServer = setup_2layer_network(nMachine, globalHostName, initHostArr, initConnArr)
     else:
