@@ -1,5 +1,12 @@
-import logging
 import numpy as np
+from multiprocessing.connection import Listener,Client
+from multiprocessing import Process, Pipe
+from threading import Thread
+from functools import reduce
+from common.constants import Constants
+import logging
+loggingLevel = logging.INFO  # logging.DEBUG, logging.INFO, logging.WARNING
+loggingFormatter = logging.Formatter('%(asctime)s - %(processName)s - %(levelname)s - %(message)s')
 
 class Server(Process):
     """Generic server class for managing connections, blocks, sending commands to workers.
@@ -22,6 +29,7 @@ class Server(Process):
         #! JS: ChildConns is never supplied during init in the repo so far,
         #! JS: but empty values are supplied for initialization in subclasses.
         #! JS: Does this need to be like this?
+        #! JS: default argument emptylist (=[]) dangerous; changes on repeated calls.
         """Initialize with (optional) parent and child connections.
 
         Args:
