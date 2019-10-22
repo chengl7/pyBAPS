@@ -22,6 +22,7 @@ from server import parse_input
 import gc
 
 if __name__=="__main__":
+    """Run local or regional server and listen for commands to execute."""
 #    mp.set_start_method('spawn')
     
     # initial configuration

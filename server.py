@@ -19,15 +19,26 @@ loggingLevel = logging.INFO  # logging.DEBUG, logging.INFO, logging.WARNING
 logging.basicConfig(level=loggingLevel,format='%(asctime)s - %(processName)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-
 from multiprocessing import Process
 #from multiprocessing.connection import Listener,Client, Pipe
 #from functools import reduce
 from multiprocessing.connection import Listener, Pipe
             
 def core_algo(origConn, veci, vecj, mati, matj, nodeFlag, blockCount, blockFlag):
-    """Core linkage algorithm
+    """Build a complete linkage tree.
 
+    Args:
+        origConn: connection to global server.
+        veci: N_BLOCK*BLOCK_SIZE x 1 numpy.array for storing a matrix row.
+        vecj: N_BLOCK*BLOCK_SIZE x 1 numpy.array for storing a matrix row.
+        mati: N_BLOCK x BLOCK_SIZE numpy.array for storing a reshaped matrix row.
+        matj: N_BLOCK x BLOCK_SIZE numpy.array for storing a reshaped matrix row.
+        nodeFlag: N_BLOCK*BLOCK_SIZE x 1 boolean numpy.array indicating deleted nodes.
+        blockCount: N_BLOCK x 1 numpy.array indicating the count of active elements per block.
+        blockFlag: N_BLOCK x 1 numpy.array indicating active blocks.
+
+    Returns:
+        Z: N_NODE-1 x 1 numpy.array recording tree.
     """
     logger.debug('enter core_algo')
     treeNodeArr=np.arange(Constants.N_NODE,dtype=Constants.DATA_TYPE)
@@ -79,6 +90,13 @@ def core_algo(origConn, veci, vecj, mati, matj, nodeFlag, blockCount, blockFlag)
 # update distance matrix between node i and j    
 #def update_pair_dist(nodeFlag, i, j, veci, vecj):
 def update_pair_dist(nodeFlag, veci, vecj):    
+    """Updates the distances for a merger of two rows (nodes).
+    
+    Args:
+        nodeFlag: N_NODE x 1 boolean array, used to mask inactive rows.
+        veci: N_NODE x 1 numpy.array, stores a row of global matrix.
+        vecj: N_NODE x 1 numpy.array, stores a row of global matrix.
+    """
 #    tmpvali=vecj[i] # ith element of veci is invalid
 #    tmpvalj=veci[j] # jth element of vecj is invalid
     
@@ -90,6 +108,7 @@ def update_pair_dist(nodeFlag, veci, vecj):
 #    veci[j] = tmpvalj   
 
 def task_gen(nBlock):
+    """Generate triangular indices (bi,bj)."""
     for bj in range(nBlock):
         for bi in range(bj+1):
             yield (bi,bj)
@@ -98,6 +117,25 @@ def task_gen(nBlock):
 global blockFlagPtr, veciPtr, vecjPtr
 
 def init_global_vars():
+    """Initialize global variables shared between server and GlobalServer process.
+
+    Returns: 
+        veci: N_NODE x 1 numpy.array, stores a row of global matrix.
+        vecj: N_NODE x 1 numpy.array, stores a row of global matrix.
+        mati: N_BLOCK x BLOCK_SIZE numpy.array for storing a reshaped matrix row.
+        matj: N_BLOCK x BLOCK_SIZE numpy.array for storing a reshaped matrix row.
+        nodeFlag: N_BLOCK*BLOCK_SIZE x 1 boolean numpy.array indicating deleted nodes.
+        blockCount: N_BLOCK x 1 numpy.array indicating the count of active elements per block.
+        blockFlag: N_BLOCK x 1 numpy.array indicating active blocks.
+    """
+    # JS: why does this server need to have a separate server thread running within it?
+    # JS: can it not simply act as the global server and run those functions in serial
+    # JS: during the core algorithm? This would not require global variables etc. 
+    # JS: unless it needs to be asynchronous. 
+    # JS: but more to the point, since every object in python is passed as a reference,
+    # JS: why do we need the globals at all if they are being passed as function arguments to
+    # JS: core_algo?
+    
     # variables in "__main__" are considered as global varibles
     # blockFlag, veci, vecj, needed to be shared
     global blockFlagPtr, veciPtr, vecjPtr
@@ -120,6 +158,13 @@ def init_global_vars():
     return (veci, vecj, mati, matj, nodeFlag, blockCount, blockFlag)
 
 def get_local_tasks(nMachine):
+    """Generate a list of block indices (bi,bj) for each machine.
+    
+    Args:
+        nMachine: number of machines.
+    Returns:
+        locSerBlockList: list of (list of tuples (bi,bj)) indicating machine blocks
+    """
     locSerBlockList = [[] for i in range(nMachine)]   # block list for each local server
     tmpgen = task_gen(Constants.N_BLOCK)
     while True:
@@ -131,6 +176,14 @@ def get_local_tasks(nMachine):
     return locSerBlockList
 
 def setup_network(nMachine, globalHostName, initHostArr, initConnArr):
+    """Setup a network, decide whether to make it 2 or 3 layers.
+
+    Args:
+        nMachine: number of machines.
+        globalHostName: hostname for global server.
+        initHostArr: addresses of connections to initialization global server.
+        initConnArr: connections to initialization global server.
+    """
     if nMachine<30:
         origConn,globalServer = setup_2layer_network(nMachine, globalHostName, initHostArr, initConnArr)
     else:
@@ -138,6 +191,18 @@ def setup_network(nMachine, globalHostName, initHostArr, initConnArr):
     return (origConn,globalServer)
 
 def setup_2layer_network(nMachine, globalHostName, initHostArr, initConnArr):
+    """Setup a 2 layer network.
+
+    Establishes a 2 layer network with nMachine LocalServers. Delegate
+    blocks to each LocalServer. Establish a GlobalServer to which each
+    LocalServer listens.
+
+    Args:
+        nMachine: number of machines.
+        globalHostName: hostname for global server.
+        initHostArr: addresses of connections to initialization global server.
+        initConnArr: connections to initialization global server.    
+    """
     initPort,gPort,rPort,lPort,authkey = Constants.get_conn_vars()
     locSerBlockList = get_local_tasks(nMachine)
     
@@ -179,6 +244,18 @@ def setup_2layer_network(nMachine, globalHostName, initHostArr, initConnArr):
     
 
 def setup_3layer_network(nMachine, globalHostName, initHostArr, initConnArr):
+    """Setup a 3 layer network.
+
+    Establishes a 3 layer network with int(round(sqrt(nMachine))) RegionalServers,
+    and nMachine LocalServers, which report to RegionalServers. RegionalServers
+    in turn report to GlobalServer process on this machine. 
+
+    Args:
+        nMachine: number of machines.
+        globalHostName: hostname for global server.
+        initHostArr: addresses of connections to initialization global server.
+        initConnArr: connections to initialization global server.    
+    """
     
     initPort,gPort,rPort,lPort,authkey = Constants.get_conn_vars()
     
@@ -259,6 +336,8 @@ def setup_3layer_network(nMachine, globalHostName, initHostArr, initConnArr):
     return (origConn,globalServer)
 
 def parse_input(args):
+    """Parse basic input from command line."""
+    # JS: perhaps should replace this with module argparse.
     nMachine = int(args[1])
     globalHostName = args[2]
     inputFiles = args[3::2]
@@ -268,6 +347,7 @@ def parse_input(args):
 from common_base import preproc_fasta, split_list
     
 if __name__=="__main__":
+    """Setup network and execute core linkage algorithm."""
     
     ## part 1: parse input, start memory monitor, set up initial connections 
     # python server2.py N globalhostname
@@ -360,7 +440,3 @@ if __name__=="__main__":
         initConnArr[i].close()
 
     memMonitor.terminate()
-
-
-
-
