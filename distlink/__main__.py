@@ -17,8 +17,8 @@ if args.mode == "server":
     import distlink.globalserver.globalserver as gs
     gs.run_server(args.nMachine, args.globalHostName, args.inputFiles, args.outDirs)
 elif args.mode == "worker":
-    import worker
-    worker.run_worker(args.nMachine, args.globalHostName)
+    import distlink.worker.worker as wo
+    wo.run_worker(args.nMachine, args.globalHostName)
     
 
 

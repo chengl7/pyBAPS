@@ -219,7 +219,7 @@ def preproc_fasta(fastaFileName, outDir,nMachine):
     and finally save data in blocks.
 
     Args:
-        fastFileName
+        fastaFileName
         outDir: destination directory to save data.
         nMachine: number of machines used.
     Returns:
@@ -231,8 +231,9 @@ def preproc_fasta(fastaFileName, outDir,nMachine):
     create_dir(outDir)
     
     # cut the alignment into chucks
-    headers= None
-    seqAln = np.load(fastaFileName)
+#    headers= None
+#    seqAln = np.load(fastaFileName)
+    headers,seqAln = read_fasta(fastaFileName)
     
     
     n,d = seqAln.shape
