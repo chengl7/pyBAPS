@@ -412,12 +412,9 @@ def parse_input(args):
     outDirs = args[4::2]
     return (nMachine, globalHostName, inputFiles, outDirs)
     
-if __name__=="__main__":
+def run_server(nMachine, globalHostName, inputFiles, outDirs):
     from common_base import preproc_fasta, split_list
     """Setup network and execute core linkage algorithm."""
-    
-    ## part 1: parse input, start memory monitor, set up initial connections 
-    nMachine, globalHostName,inputFiles,outDirs = parse_input(sys.argv)
     
     memMonitor = Process(target=disp_usage_forever,args=(logger.info,),name="Server Node")
     memMonitor.start()
