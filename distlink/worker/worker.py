@@ -116,7 +116,7 @@ def cal_dist_block_batch(outDir, batchList):
     for bi,bj in batchList:
         cal_dist_block(outDir,bi,bj)
 
-if __name__=="__main__":
+def run_worker(nMachine, globalHostName):
     """Run local or regional server and listen for commands to execute."""
     nMachine = int(sys.argv[1])  
     globalHostName = sys.argv[2] 
