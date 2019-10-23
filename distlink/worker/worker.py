@@ -12,9 +12,10 @@ from multiprocessing.connection import Client
 
 import numpy as np
 
-from common.constants import Constants
-from common.misc import split_list
-from common.misc import start_server
+from distlink.common.constants import Constants
+from distlink.common.misc import split_list
+from distlink.worker import LocalServer
+from common.server import Server
 import pickle
 import os
 
@@ -22,6 +23,25 @@ from multiprocessing import RawArray
 from multiprocessing import Pool
 
 varDict = {}  # global variable to be shared between processes
+
+def start_server(cmdstr,args):
+    #! JS: Is this safe?
+    """Create and initialize a server by calling a given function (cmdstr) and args.
+    
+    Args:
+        cmdstr: the name of a function to call that returns server.
+        args: arguments for function.
+    Returns:
+        server: server object.
+    """
+#    func=getattr(sys.modules['__main__'],cmdstr)
+    if cmdstr == "Server":
+        server = Server(*args)
+    elif cmdstr == "LocalServer":
+        server = LocalServer(*args)
+    else:
+        raise ValueError("Cannot start server with command:", cmdstr)
+    return server        
 
 # used to initialize each process
 def init_worker(dist_func, xiInfo, xjInfo, bmatInfo):
@@ -118,8 +138,6 @@ def cal_dist_block_batch(outDir, batchList):
 
 def run_worker(nMachine, globalHostName):
     """Run local or regional server and listen for commands to execute."""
-    nMachine = int(sys.argv[1])  
-    globalHostName = sys.argv[2] 
     
     initPort,gPort,rPort,lPort,authkey = Constants.get_conn_vars() # g:global r:regional, l:local
 

@@ -258,20 +258,6 @@ def preproc_fasta(fastaFileName, outDir,nMachine):
     
     return (n,d)
     
-def start_server(cmdstr,args):
-    #! JS: Is this safe?
-    """Create and initialize a server by calling a given function (cmdstr) and args.
-    
-    Args:
-        cmdstr: the name of a function to call that returns server.
-        args: arguments for function.
-    Returns:
-        server: server object.
-    """
-    func=getattr(sys.modules['__main__'],cmdstr)
-    server = func(*args)
-    return server        
-
 class FuncList:
     """A class used to store and fetch functions.
 

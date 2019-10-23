@@ -9,11 +9,14 @@ import numpy as np
 
 from multiprocessing.sharedctypes import RawArray
 from multiprocessing import Process
-from multiprocessing.connection import Listener, Pipe
+from multiprocessing.connection import Listener
+from multiprocessing.connection import Pipe
 
 from itertools import chain
 
 from distlink.common.misc import disp_usage_forever
+from distlink.common.misc import preproc_fasta
+from distlink.common.misc import split_list
 from distlink.common.constants import Constants
 from distlink.common.server import Server
 
@@ -420,6 +423,7 @@ def run_server(nMachine, globalHostName, inputFiles, outDirs):
     
     initPort,gPort,rPort,lPort,authkey = Constants.get_conn_vars() # g:global r:regional, l:local
     initAddress = (globalHostName, initPort)     # family is deduced to be 'AF_INET'
+    print(globalHostName, initPort, authkey)
     initGlobalServer = Listener((globalHostName,initPort), authkey=authkey)
     
     logger.debug('initial global server established at %s' % str(initAddress))
