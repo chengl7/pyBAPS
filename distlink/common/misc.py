@@ -233,7 +233,7 @@ def preproc_fasta(fastaFileName, outDir,nMachine):
     # cut the alignment into chucks
 #    headers= None
 #    seqAln = np.load(fastaFileName)
-    headers,seqAln = read_fasta(fastaFileName)
+    headers,seqAln = read_fasta(fastaFileName, True)
     
     
     n,d = seqAln.shape
