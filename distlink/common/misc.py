@@ -5,7 +5,7 @@ import os
 import sys
 import psutil
 import time
-from common.constants import Constants
+from distlink.common.constants import Constants
 
 import logging
 loggingFormatter = logging.Formatter('%(asctime)s - %(processName)s - %(levelname)s - %(message)s')

@@ -3,7 +3,7 @@ from multiprocessing.connection import Listener,Client
 from multiprocessing import Process, Pipe
 from threading import Thread
 from functools import reduce
-from common.constants import Constants
+from distlink.common.constants import Constants
 import logging
 loggingLevel = logging.INFO  # logging.DEBUG, logging.INFO, logging.WARNING
 loggingFormatter = logging.Formatter('%(asctime)s - %(processName)s - %(levelname)s - %(message)s')

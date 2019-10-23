@@ -2,6 +2,8 @@ from scipy.cluster.hierarchy import linkage
 from scipy.spatial.distance import hamming
 import numpy as np
 import random
+import server
+import worker
 
 for i in range(100):
     n = random.randint(100,1000)

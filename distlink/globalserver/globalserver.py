@@ -13,9 +13,9 @@ from multiprocessing.connection import Listener, Pipe
 
 from itertools import chain
 
-from common.misc import disp_usage_forever
-from common.constants import Constants
-from common.server import Server
+from distlink.common.misc import disp_usage_forever
+from distlink.common.constants import Constants
+from distlink.common.server import Server
 
 import logging
 loggingFormatter = logging.Formatter('%(asctime)s - %(processName)s - %(levelname)s - %(message)s')
@@ -413,7 +413,6 @@ def parse_input(args):
     return (nMachine, globalHostName, inputFiles, outDirs)
     
 def run_server(nMachine, globalHostName, inputFiles, outDirs):
-    from common_base import preproc_fasta, split_list
     """Setup network and execute core linkage algorithm."""
     
     memMonitor = Process(target=disp_usage_forever,args=(logger.info,),name="Server Node")
@@ -426,8 +425,9 @@ def run_server(nMachine, globalHostName, inputFiles, outDirs):
     logger.debug('initial global server established at %s' % str(initAddress))
     
      # the machine for the global server is also used as local server
-    subprocess.Popen([sys.executable, os.path.dirname(os.path.realpath(__file__))+os.path.sep+"worker.py",
-                    sys.argv[1],sys.argv[2]]) 
+#    subprocess.Popen([sys.executable, os.path.dirname(os.path.realpath(__file__))+os.path.sep+"worker.py",
+#                    sys.argv[1],sys.argv[2]]) 
+    # JS: do this outside of the code
     
     initConnArr=[]
     initHostArr=[]
