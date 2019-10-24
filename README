@@ -1,0 +1,16 @@
+USAGE:
+
+To launch server:
+
+python3.7 -m distlink server -nMachine N -globalHostName h -inputFiles file1 [file2 ... fileM] -outDirs outdir1 [outdir2 ... outdirM]
+
+To launch worker:
+
+python3.7 -m distlink worker -nMachine N -globalHostName h
+
+TESTING:
+
+To launch test server:
+
+python3.7 -m distlink test -nMachine N -globalHostName h -outDirs outdir1 outdir2 ... outdirM
+
