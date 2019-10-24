@@ -136,7 +136,7 @@ def cal_dist_block_batch(outDir, batchList):
     for bi,bj in batchList:
         cal_dist_block(outDir,bi,bj)
 
-def run_worker(nMachine, globalHostName):
+def run_worker(globalHostName):
     """Run local or regional server and listen for commands to execute."""
     
     initPort,gPort,rPort,lPort,authkey = Constants.get_conn_vars() # g:global r:regional, l:local

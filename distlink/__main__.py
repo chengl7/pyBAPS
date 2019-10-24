@@ -17,7 +17,7 @@ if args.mode == "server":
     gs.run_server(args.nMachine, args.globalHostName, args.inputFiles, args.outDirs)
 
 elif args.mode == "worker":
-    wo.run_worker(args.nMachine, args.globalHostName)
+    wo.run_worker(args.globalHostName)
 
 elif args.mode == "test":
     import distlink.tests.generate_dataset as gd
