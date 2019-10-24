@@ -212,18 +212,7 @@ class BlockProcess(Server):
         
     def update_child_block_list(self):
         """Fetches a list of one element, the (bi,bj) tuple."""
-        # JS: in what way does this update? 
-        # JS: if this is the implementation of an interface,
-        # JS: for which there needs to be a base case that does nothing,
-        # JS: why not define that base case in the superclass,
-        # JS: and make specific methods for each subclass?
-        # JS: instead we make complex and uninitive overrides of
-        # JS: default behaviour.
-        # JS: or, if we have at the terminal global layer, a 
-        # JS: requirement to get block bi,bj,
-        # JS: why transmit the message update_child_block_list
-        # JS: why not just ask for block bi and bj then and there?
-        # JS: this seems very fragile and impedes reading.
+        # JS: does not update
         return [(self.block.bi,self.block.bj)]
     
     def del_blocks(self,bi):

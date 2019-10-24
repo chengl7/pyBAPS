@@ -211,7 +211,6 @@ def preproc_fasta(fastaFileName, outDir,nMachine):
     #! JS: does this function have too many responsibilities?
     #! JS: e.g. initializing constants doesn't seem to be part
     #! JS: of file preprocessing. 
-    #! JS: perhaps different language would improve clarity.
     """Perform several pre-processing functions, convert .fasta to block data.
 
     Create a directory, parse a fasta alignment,

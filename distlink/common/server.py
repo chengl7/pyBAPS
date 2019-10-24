@@ -106,12 +106,7 @@ class Server(Process):
          
     def check_child_conns(self):
         """..."""
-        #! JS: in what way does this check child connections?
-        #! JS: defines .childConns via result that was sent to ._conn
-        #! JS: down .pconn
-        #! JS: does join ._proc that is building the child connections
-        #! JS: does close ._conn used to setup child connections
-        #! JS: seemingly finalizes child connection setup
+        #! JS: does this check child connections?
         if self._conn:
             self.childConns = self._conn.recv()
             self._proc.join()
@@ -188,11 +183,7 @@ class Server(Process):
             xi (int): global matrix row index
             delFlag (bool): whether to also flag children for updating via childUpdateFlagArr.
         """
-        #! JS: when ii and jj are merged, jj is to be deleted. So the flag is true for jj.
-        #! JS: perhaps a seperate function would be better, to send the deletion request separately.
-        #! JS: delFlag does not actually indicate deletion.
-        #! JS: delFlag is only used to indicate if minVal needs to be recomputed for any children when it is requested. 
-        #! JS: perhaps different language would improve clarity.
+        #! JS: NB check
         bi,ii = Constants.getbi(xi)
         self.log('debug',f'Extract row xi={xi}, bi={bi} ii={ii}')
         

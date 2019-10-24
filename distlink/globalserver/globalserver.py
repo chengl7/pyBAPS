@@ -198,13 +198,8 @@ def init_global_vars():
         blockCount: N_BLOCK x 1 numpy.array indicating the count of active elements per block.
         blockFlag: N_BLOCK x 1 numpy.array indicating active blocks.
     """
-    # JS: why does this server need to have a separate server thread running within it?
-    # JS: can it not simply act as the global server and run those functions in serial
-    # JS: during the core algorithm? This would not require global variables etc. 
-    # JS: unless it needs to be asynchronous. 
-    # JS: but more to the point, since every object in python is passed as a reference,
-    # JS: why do we need the globals at all if they are being passed as function arguments to
-    # JS: core_algo?
+    # JS: does this server need to have a separate server thread running inside?
+    # JS: needs to be asynch?
     
     global blockFlagPtr, veciPtr, vecjPtr
     blockFlagPtr = RawArray(Constants.TYPE_TBL['bool'], Constants.N_BLOCK)
@@ -252,11 +247,6 @@ def setup_network(nMachine, globalHostName, initHostArr, initConnArr):
         initHostArr: addresses of connections to initialization global server.
         initConnArr: connections to initialization global server.
     """
-    # JS: The network configuration seems to have some generalizability
-    # JS: but also require 2 or 3 layer networks to be explicitly specified.
-    # JS: This perhaps hinders clarity.
-    # JS: Perhaps the network should be N-layer (generalized) or 
-    # JS: be explicit for clarity.
     if nMachine<30:
         origConn,globalServer = setup_2layer_network(nMachine, globalHostName, initHostArr, initConnArr)
     else:
