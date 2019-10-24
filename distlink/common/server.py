@@ -284,7 +284,9 @@ class Server(Process):
                 handler.close()
                 self.logger.removeHandler(handler)
         
-        raise StopIteration
+#        raise StopIteration
+        # JS: have we safely closed? Return True instead of raising exception
+        return True
         
     # reiceive cmd from parent, excute it, suspend
     def exec_task(self):
@@ -295,6 +297,8 @@ class Server(Process):
         args = cmdarr[1:]
         if cmd in ['STOP','close']:
             self.close()
+            return True
+#        else:
         res = self.perform_task(cmd,args)  # res is a list
         self.parentConn.send(res)
         yield
@@ -305,5 +309,11 @@ class Server(Process):
                 next(self.exec_task())
             except StopIteration:
                 return
+            except OSError as e:
+                if str(e) == "handle is closed":
+                    return
+                else:
+                    raise
+                
             
 

@@ -480,7 +480,7 @@ def run_server(nMachine, globalHostName, inputFiles, outDirs):
         np.save(resfile,Z)
     
         # step 5: shutdown all servers
-        origConn.send(['STOP',])
+        origConn.send(['close',])
         globalServer.join()        
         
         # step 6: clean up, unlink global varibles, gabbage collect
@@ -492,7 +492,7 @@ def run_server(nMachine, globalHostName, inputFiles, outDirs):
     ## part 3: close initial connections
     # initGlobalServer already closed listening after all connections are established
     for i in range(nMachine):
-        initConnArr[i].send(['STOP',])
+        initConnArr[i].send(['close',])
     for i in range(nMachine):
         res = initConnArr[i].recv()
         initConnArr[i].close()
