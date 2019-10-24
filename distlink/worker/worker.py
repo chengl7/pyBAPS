@@ -15,7 +15,7 @@ import numpy as np
 from distlink.common.constants import Constants
 from distlink.common.misc import split_list
 from distlink.worker.localserver import LocalServer
-from common.server import Server
+from distlink.common.server import Server
 import pickle
 import os
 

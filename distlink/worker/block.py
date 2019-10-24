@@ -1,7 +1,7 @@
 import numpy as np
-from common.constants import Constants
-from common.misc import MinTurple
-from common.server import Server
+from distlink.common.constants import Constants
+from distlink.common.misc import MinTurple
+from distlink.common.server import Server
 
 class Block:
     #! JS: should the block functions be taking global coordinates and translating them in every function?
