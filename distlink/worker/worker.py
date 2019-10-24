@@ -85,8 +85,8 @@ def cal_dist_block(outDir, bi, bj):
     """Calculate the distance (in parallel) between data segments bi and bj, save to file in outDir."""
     # skip if result is ready
     if os.path.isfile(Constants.get_dist_block_file(bi,bj)):
-        sys.stderr.write("WARNING: numpy block file exists already; looks like we are resuming a run.
-                            Guarantee that this is not a new run.")
+        sys.stderr.write("WARNING: numpy block file exists already; looks like we are resuming a run. "
+                            "Guarantee that this is not a new run.\n")
         return
 
     Xi = np.load(Constants.get_data_block_file(bi))
