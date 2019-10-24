@@ -476,7 +476,6 @@ def run_server(nMachine, globalHostName, inputFiles, outDirs):
     
         # step 4: running the core linkage algorithm, save the result
         Z = core_algo(origConn, veci, vecj, mati, matj, nodeFlag, blockCount, blockFlag)
-        print(Z)
         resfile = Constants.get_res_file('Z.npy')
         np.save(resfile,Z)
     

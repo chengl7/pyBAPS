@@ -6,7 +6,7 @@ from distlink.common.misc import fasta_iter
 def hamming(s1,s2,w=None):
     return len([i for i in range(len(s1)) if s1[i] != s2[i]])
 
-def brute_force_verify(seqs, Z):
+def brute_force_verify(fastaFileName, Z):
     """ Provide a brute force validation of a solution Z. 
     
     Since for complete linkage, at least, non-uniqueness applies, we cannot
@@ -15,7 +15,12 @@ def brute_force_verify(seqs, Z):
     as ties will become improbable. Cannot be assumed for non-random
     sequences. This very simple O(n^3) alg verifies a tree.
     """
-    dmat = np.fromfunction(lambda si, sj: hamming(si,sj), seqs, dtype=int) 
+    seqs = np.array([s for h,s in fasta_iter(fastaFileName)])
+    dmat = np.zeros((len(seqs), len(seqs)))
+    for si in range(len(seqs)):
+        for sj in range(len(seqs)):
+            dmat[si,sj] = hamming(seqs[si], seqs[sj])
+
     def cluster_dist(cl1, cl2):
         # Compute complete linkage distance between two clusters, explicitly
         maxv = 0
