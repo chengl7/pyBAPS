@@ -237,6 +237,7 @@ def preproc_fasta(fastaFileName, outDir,nMachine):
     
     n,d = seqAln.shape
     Constants.init(n,d,fastaFileName,outDir,nMachine)
+
     
     dataDir = Constants.DATA_DIR
     distDir = Constants.DIST_DIR

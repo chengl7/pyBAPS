@@ -70,6 +70,7 @@ class Constants:
         if nb*(nb+1)/2<nMachine:  # ensure at least one block for each machine
             nb = int(np.ceil(-0.5+0.5*np.sqrt(1+8*nMachine)))
             
+        print(nb,nBlock)
         if nBlock:
             assert nBlock*nBlock+nBlock < 2*nMachine*cls.nMaxProcPerMachine
             assert nBlock*nBlock+nBlock >= 2*nMachine

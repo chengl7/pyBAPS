@@ -10,7 +10,12 @@ python3.7 -m distlink worker -nMachine N -globalHostName h
 
 TESTING:
 
-To launch test server:
+To launch test server (with randomly generated data, scipy comparison & O(n^3) verification  test):
 
 python3.7 -m distlink test -nMachine N -globalHostName h -outDirs outdir1 outdir2 ... outdirM
+
+To launch test server (with specific data, O(n^3) verification test):
+
+python3.7 -m distlink test -nMachine N -globalHostName h -outDirs outdir -inputFiles file1
+
 
