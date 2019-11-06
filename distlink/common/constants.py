@@ -210,6 +210,30 @@ class Constants:
     @staticmethod
     def dist_hamming(x1,x2):
         return sum(np.not_equal(x1,x2))
+
+    @classmethod
+    def lance_williams(veci,vecj,nvec,i,j):
+        # d_(ij)k = a_id_ik + a_jd_jk + bd_ij + g|d_ik-d_jk|
+        if cls.linkage_opt == "Complete":
+            # a_i = 1/2, b = 0, g = 0.5
+            return np.maximum(veci,vecj)
+        elif cls.linkage_opt == "Single":
+            # a_i = a_j = (1/2), g=(1/2)
+            return np.minimum(veci,vecj)
+        elif cls.linkage_opt == "Ward":
+            # a_i = (n_i+n_k)/(n_i+n_j+n_k), b = -(n_k)/(n_i+n_j+n_k), g = 0
+            ni = nvec[i]
+            nj = nvec[j]
+            dij = veci[j]
+            ai = (ni+nk)/(ni+nj+nvec)
+            aj = (nj+nk)/(ni+nj+nvec)
+            b = -nvec/(ni+nj+nvec)
+            return ai*veci + aj*vecj + b*dij
+        elif cls.linkage_opt == "UPGMA":
+            raise ValueError("%s not yet implemented." % cls.linkage_opt)
+            # a_i = n_i/(n_i+n_j), b = 0, g = 0
+        else:
+            raise ValueError("Unknown linkage function %s" % cls.linkage_opt)
     
 
     
