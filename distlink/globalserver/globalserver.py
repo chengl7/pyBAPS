@@ -413,7 +413,7 @@ def parse_input(args):
     outDirs = args[4::2]
     return (nMachine, globalHostName, inputFiles, outDirs)
     
-def run_server(nMachine, globalHostName, inputFiles, outDirs):
+def run_server(nMachine, globalHostName, inputFiles, outDirs,linkage):
     """Setup network and execute core linkage algorithm."""
     
     memMonitor = Process(target=disp_usage_forever,args=(logger.info,),name="Server Node")
@@ -448,9 +448,12 @@ def run_server(nMachine, globalHostName, inputFiles, outDirs):
             logger.warn(f'input file "{infile}" does not exist, quit!')
             continue
         # step 1: preprocess input data, initialize Constants
-        [n,d] = preproc_fasta(infile, outDir,nMachine)  # Constants initialized here
+        [n,d] = preproc_fasta(infile, outDir,nMachine,linkage)  # Constants initialized here
+
+        # JS: temporarily set the linkage here
+
         logger.info(f'start processing input file: {infile}, outDir={outDir}')
-        initargs = (n,d,infile,outDir,nMachine)
+        initargs = (n,d,infile,outDir,nMachine,linkage)
         Constants.init(*initargs)
         for i in range(nMachine):
             initConnArr[i].send(['Constants',*initargs])

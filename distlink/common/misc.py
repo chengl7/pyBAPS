@@ -207,7 +207,7 @@ def split_list(inList, nSubList):
     return resList
     
 #from server2 import Constants
-def preproc_fasta(fastaFileName, outDir,nMachine):
+def preproc_fasta(fastaFileName, outDir,nMachine,linkage):
     #! JS: does this function have too many responsibilities?
     #! JS: e.g. initializing constants doesn't seem to be part
     #! JS: of file preprocessing. 
@@ -236,7 +236,7 @@ def preproc_fasta(fastaFileName, outDir,nMachine):
     
     
     n,d = seqAln.shape
-    Constants.init(n,d,fastaFileName,outDir,nMachine)
+    Constants.init(n,d,fastaFileName,outDir,nMachine,linkage)
 
     
     dataDir = Constants.DATA_DIR
