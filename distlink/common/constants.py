@@ -45,9 +45,11 @@ class Constants:
     DIST_FUNC = None
     
     nMaxProcPerMachine = 50
+
+    linkage_opt = None
     
     @classmethod
-    def init(cls, n, xlen, datafile, outdir, nMachine, nBlock=None, distopt='Hamming'):
+    def init(cls, n, xlen, datafile, outdir, nMachine, linkage,nBlock=None, distopt='Hamming'):
         """Initialize with basic constants, compute derived constants.
 
         Args:
@@ -61,6 +63,7 @@ class Constants:
             nBlock: optionally specified number of blocks. Otherwise calculated.
             distopt: distance function.
         """
+        cls.linkage_opt = linkage
         cls.N_NODE = n
         assert(n*(n+1)>10*nMachine)
         
@@ -212,26 +215,36 @@ class Constants:
         return sum(np.not_equal(x1,x2))
 
     @classmethod
-    def lance_williams(veci,vecj,nvec,i,j):
+    def lance_williams(cls,veci,vecj,clusterSizeArr,ii,jj,minval):
         # d_(ij)k = a_id_ik + a_jd_jk + bd_ij + g|d_ik-d_jk|
-        if cls.linkage_opt == "Complete":
+        lo = cls.linkage_opt[0]
+        if lo == "Complete":
             # a_i = 1/2, b = 0, g = 0.5
             return np.maximum(veci,vecj)
-        elif cls.linkage_opt == "Single":
+        elif lo == "Single":
             # a_i = a_j = (1/2), g=(1/2)
             return np.minimum(veci,vecj)
-        elif cls.linkage_opt == "Ward":
+        elif lo == "Ward":
             # a_i = (n_i+n_k)/(n_i+n_j+n_k), b = -(n_k)/(n_i+n_j+n_k), g = 0
-            ni = nvec[i]
-            nj = nvec[j]
-            dij = veci[j]
-            ai = (ni+nk)/(ni+nj+nvec)
-            aj = (nj+nk)/(ni+nj+nvec)
-            b = -nvec/(ni+nj+nvec)
+            dij = minval
+            ni = clusterSizeArr[ii]
+            nj = clusterSizeArr[jj]
+            nkvec = clusterSizeArr[np.where(clusterSizeArr != Constants.DEL_VAL)]
+
+#            ai = (ni+nveci)/(ni+nj+nveci)
+#            aj = (nj+nvecj)/(ni+nj+nvecj)
+            ai = (ni+nkvec)/(ni+nj+nkvec)
+            aj = (nj+nkvec)/(ni+nj+nkvec)
+            b = -nkvec/(ni+nj+nkvec)
             return ai*veci + aj*vecj + b*dij
-        elif cls.linkage_opt == "UPGMA":
-            raise ValueError("%s not yet implemented." % cls.linkage_opt)
+        elif lo == "UPGMA":
+#            raise ValueError("%s not yet implemented." % cls.linkage_opt)
             # a_i = n_i/(n_i+n_j), b = 0, g = 0
+            ni = clusterSizeArr[ii]
+            nj = clusterSizeArr[jj]
+            ai = ni*(ni+nj)
+            aj = nj*(nj+nj)
+            return ai*veci + aj*vecj
         else:
             raise ValueError("Unknown linkage function %s" % cls.linkage_opt)
     

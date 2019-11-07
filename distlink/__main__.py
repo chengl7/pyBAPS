@@ -8,13 +8,14 @@ parser.add_argument("-nMachine", type=int)
 parser.add_argument("-globalHostName", type=str)
 parser.add_argument("-inputFiles", nargs='+', type=str, default=None)
 parser.add_argument("-outDirs", nargs='+', type=str, default=None)
+parser.add_argument("-linkage", nargs=1, type=str, default=None)
 
 args = parser.parse_args()
 
 if args.mode == "server":
     if (args.inputFiles is None or args.outDirs is None):
         parser.error("Server requires both -inputFiles and -outDirs to be specified")
-    gs.run_server(args.nMachine, args.globalHostName, args.inputFiles, args.outDirs)
+    gs.run_server(args.nMachine, args.globalHostName, args.inputFiles, args.outDirs, args.linkage)
 
 elif args.mode == "worker":
     wo.run_worker(args.globalHostName)
@@ -42,23 +43,23 @@ elif args.mode == "test":
         gd.write_random_fasta(randomFastaFname1, 20, 50001) 
         gd.write_random_fasta(randomFastaFname2, 201, 11) 
         print("Running server...")
-        gs.run_server(args.nMachine, args.globalHostName, [randomFastaFname1, randomFastaFname2], args.outDirs)
+        gs.run_server(args.nMachine, args.globalHostName, [randomFastaFname1, randomFastaFname2], args.outDirs,args.linkage)
         print("Verifying solution 1...")
         Z1 = np.load("%s/Z.npy" % args.outDirs[0])
-        Zval = cv.validation_cluster(randomFastaFname1)
+        Zval = cv.validation_cluster(randomFastaFname1, args.linkage)
         print("Verifying solution 2...")
         Z2 = np.load("%s/Z.npy" % args.outDirs[1])
-        cv.brute_force_verify(randomFastaFname2, Z2)
+        cv.naive_verify(randomFastaFname2, Z2, args.linkage[0])
         print("Tests passed!")
     else:
         if len(args.inputFiles) > 1:
             print("For testing, only one input file can be specified")
             sys.exit(1)
         print("Running server...")
-        gs.run_server(args.nMachine, args.globalHostName, args.inputFiles, args.outDirs)
+        gs.run_server(args.nMachine, args.globalHostName, args.inputFiles, args.outDirs,args.linkage)
         print("Verifying solution...")
         Z2 = np.load("%s/Z.npy" % args.outDirs[0])
-        cv.brute_force_verify(args.inputFiles[0], Z2)
+        cv.naive_verify(args.inputFiles[0], Z2, args.linkage[0])
         print("Tests passed!")
 
 

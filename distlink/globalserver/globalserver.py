@@ -161,22 +161,23 @@ def core_algo(origConn, veci, vecj, mati, matj, nodeFlag, blockCount, blockFlag)
             origConn.recv()
         
         # update distance of the merged node of ii and jj
-        update_pair_dist(nodeFlag, veci, vecj, clusterSizeArr, ii, jj)
+        update_pair_dist(nodeFlag, veci, vecj, clusterSizeArr, ii, jj, minval)
         
         # insert row ii into the blocks
         origConn.send(['ins_row',ii,'mati'])
         origConn.recv()
                     
         treeNodeArr[ii] = iStep+Constants.N_NODE
-        treeNodeArr[jj] = 0
+        treeNodeArr[jj] = Constants.DEL_VAL
         
         # Update the cluster size array for linkage functions requiring n_i (eg ward)
         clusterSizeArr[ii] += 1
-        clusterSizeArr[jj] = 0
+        clusterSizeArr[jj] = Constants.DEL_VAL
+#        clusterSizeArr = np.delete(clusterSizeArr,jj)
 
     return Z
 
-def update_pair_dist(nodeFlag, veci, vecj, nvec=None, i=None, j=None):    
+def update_pair_dist(nodeFlag, veci, vecj, nvec=None, i=None, j=None, minval=None):    
     """Updates the distances for a merger of two rows (nodes).
     
     Args:
@@ -186,7 +187,7 @@ def update_pair_dist(nodeFlag, veci, vecj, nvec=None, i=None, j=None):
         nvec: for more advanced linkage, n is cluster sizes
     """
 #    veci[nodeFlag] = np.maximum(veci[nodeFlag],vecj[nodeFlag])
-    veci[nodeFlag] = constants.lance_williams(veci[nodeFlag], vecj[nodeFlag], nvec, i, j)
+    veci[nodeFlag] = Constants.lance_williams(veci[nodeFlag], vecj[nodeFlag], nvec, i, j,minval)
 
 def task_gen(nBlock):
     """Generate triangular indices (bi,bj)."""
