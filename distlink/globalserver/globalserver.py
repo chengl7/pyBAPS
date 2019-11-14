@@ -108,7 +108,7 @@ class GlobalServer(Server):
         return None
 
             
-def core_algo(origConn, veci, vecj, mati, matj, nodeFlag, blockCount, blockFlag):
+def core_algo(origConn, veci, vecj, mati, matj, nodeFlag, blockCount, blockFlag,test=False):
     """Build a complete linkage tree.
 
     Args:
@@ -136,7 +136,8 @@ def core_algo(origConn, veci, vecj, mati, matj, nodeFlag, blockCount, blockFlag)
     logger.debug('update child block List')
     origConn.send(['update_child_block_list',])
     origConn.recv()
-    lwtester = LwTester(Constants.linkage_opt[0], Constants.DATA_FILE_NAME)
+    if test:
+        lwtester = LwTester(Constants.linkage_opt[0], Constants.DATA_FILE_NAME)
     
     for iStep in range(Constants.N_NODE-1):
         origConn.send(['get_min',])
@@ -154,15 +155,9 @@ def core_algo(origConn, veci, vecj, mati, matj, nodeFlag, blockCount, blockFlag)
 #        Z[iStep,0:2] = np.sort(treeNodeArr[[ii,jj]])
         Z[iStep,0:2] = treeNodeArr[[ii,jj]]
         Z[iStep,2] = minval
-        print()
-        print("CORE ALGORITHM MERGING:", Z[iStep], ii, jj)
 
-        lwtester.testminval(Z[:iStep],ii,jj,minval,Constants.N_NODE)
-#        print("coreZ",ii,jj,treeNodeArr[[ii,jj]], iStep+Constants.N_NODE,iStep, Z[iStep])
-#        print(Z[-1])
-#        Z[iStep,2] = minval
-        for zi in range(iStep):
-            print(Constants.N_NODE+zi,Z[zi])
+        if test:
+            lwtester.testminval(Z[:iStep],ii,jj,minval,Constants.N_NODE)
         
         # merge ii and jj, update distance matrix
         # extract jjth row and delete it
@@ -182,11 +177,12 @@ def core_algo(origConn, veci, vecj, mati, matj, nodeFlag, blockCount, blockFlag)
             origConn.send(['del_blocks',bjj])
             origConn.recv()
         
-        lwtester.testri(Z[:iStep],ii,jj,veci,vecj)
+        if test:
+            lwtester.testri(Z[:iStep],ii,jj,veci,vecj)
         # update distance of the merged node of ii and jj
         lw = update_pair_dist(nodeFlag, veci, vecj, clusterSizeArr, ii, jj, minval)
-        # manually calculate lw
-        lwtester.testlw(Z[:iStep],ii,jj,lw,Constants.N_NODE,Constants.DEL_VAL_DIST)
+        if test:
+            lwtester.testlw(Z[:iStep],ii,jj,lw,Constants.N_NODE,Constants.DEL_VAL_DIST)
         
         # insert row ii into the blocks
         origConn.send(['ins_row',ii,'mati'])
@@ -198,9 +194,48 @@ def core_algo(origConn, veci, vecj, mati, matj, nodeFlag, blockCount, blockFlag)
         # Update the cluster size array for linkage functions requiring n_i (eg ward)
         clusterSizeArr[ii] += clusterSizeArr[jj]
         clusterSizeArr[jj] = Constants.DEL_VAL_IND
-#        clusterSizeArr = np.delete(clusterSizeArr,jj)
 
     return Z
+
+def lance_williams(veci,vecj,clusterSizeArr,ii,jj,minval):
+    """Compute new dissimilarities for a merge.
+
+    Lance-williams dissimilarity update formula can be used to
+    update distances d((i \cup j), k); in general requires
+    distances d(i,k), d(j,k) and cluster sizes |i|, |j| 
+
+    Args:
+        veci: array of distances for each k, d(i,k)
+        vecj: array of distances for each k, d(j,k)
+        clusterSizeArr: array recording cluster sizes, e.g. |i|
+        ii: index of iith cluster (in matrix), between 0 and N_NODE
+        jj: index of jjth cluster (in matrix), between 0 and N_NODE
+        minval: distance between ii and jj d(ii,jj)
+    """
+    lo = Constants.linkage_opt[0]
+    if lo == "Complete":
+        return np.maximum(veci,vecj)
+    elif lo == "Single":
+        return np.minimum(veci,vecj)
+    elif lo == "Ward":
+        dij = minval
+        ni = clusterSizeArr[ii]
+        nj = clusterSizeArr[jj]
+        nkvec = clusterSizeArr[np.where(clusterSizeArr != Constants.DEL_VAL_IND)]
+
+        ai = (ni+nkvec)/(ni+nj+nkvec)
+        aj = (nj+nkvec)/(ni+nj+nkvec)
+        b = -nkvec/(ni+nj+nkvec)
+        return ai*veci + aj*vecj + b*dij
+    elif lo == "UPGMA":
+        ni = clusterSizeArr[ii]
+        nj = clusterSizeArr[jj]
+        ai = ni/float((ni+nj))
+        aj = nj/float((ni+nj))
+        ret = aj*vecj + ai*veci
+        return ret
+    else:
+        raise ValueError("Unknown linkage function %s" % cls.linkage_opt)
 
 def update_pair_dist(nodeFlag, veci, vecj, nvec=None, i=None, j=None, minval=None):    
     """Updates the distances for a merger of two rows (nodes).
@@ -212,15 +247,13 @@ def update_pair_dist(nodeFlag, veci, vecj, nvec=None, i=None, j=None, minval=Non
         nvec: for more advanced linkage, n is cluster sizes
     """
 #    veci[nodeFlag] = np.maximum(veci[nodeFlag],vecj[nodeFlag])
-    lw = Constants.lance_williams(veci[nodeFlag], vecj[nodeFlag], nvec, i, j, minval)
-    # Lance-Williams changes DEL_VALS (does not happen with max
+    lw = lance_williams(veci[nodeFlag], vecj[nodeFlag], nvec, i, j, minval)
+    # JS: average linkages change DEL_VALS (does not happen with max
     # because DEL_VAL is always max
-    # Is this correct? If DEL_VAL is correctly specified?
-    # mask with DEL_VALs 
     # JS: veci includes a zero for self-distances of zero distance if it is ii
     # But no index for jj
-    # Also seems veci is BLOCK_SIZE*BLOCK_SIZE long; rather than N_NODE long;
-    # it is zero padded
+    # Also seems veci is BLOCK_SIZE*BLOCK_SIZE-iStep long; rather than N_NODE long;
+    # it is zero padded but has no jj
     veci[nodeFlag] = lw
     return lw
 
