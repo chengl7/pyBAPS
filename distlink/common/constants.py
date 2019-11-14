@@ -29,6 +29,7 @@ class Constants:
     TYPE_TBL = None
 
     DEL_VAL = 0
+    DEL_VAL_DIST = 0
 
     BLOCK_SIZE = 0
     N_BLOCK = 0
@@ -82,16 +83,40 @@ class Constants:
             cls.N_BLOCK = nb
         cls.BLOCK_SIZE = int(np.ceil(n/cls.N_BLOCK))
         
-        nb = cls.choose_data_bits(max(n,xlen))
+#        nb = cls.choose_data_bits(max(n,xlen))
+        # JS: try 2 different data types; one for indices (bits required to store integers up to n
+        # JS: one for distances
+        nb = cls.choose_data_bits(n)
         
         cls.DATA_TYPE = 'uint'+str(nb)
+        type_dist_domain = 'float'
+        type_dist_bits = 64
+        cls.DATA_TYPE_DIST = type_dist_domain+str(type_dist_bits)
+        zbits = max(nb, type_dist_bits)
+        # float64 can repesent 
+        cls.Z_TYPE = type_dist_domain+str(zbits)
+
+#        if linkage not in ["Single", "Complete"]:
+#            cls.DATA_TYPE = 'float64'
+#            if cls.DATA_TYPE.startswith('uint'):
+#               logger.error("Cannot use integer type for complete linkage criterion")
+#                raise ValueError("uint type incompatible with complete linkage criterion")
         
         types = [ct.c_bool, ct.c_short, ct.c_ubyte, ct.c_ushort, ct.c_uint, ct.c_int, ct.c_long, ct.c_ulong, ct.c_float, ct.c_double]
         typed = {str(np.dtype(ctype)): ctype for ctype in types}
         cls.TYPE_TBL = typed
-        cls.CTYPE = typed[Constants.DATA_TYPE]
+#        cls.CTYPE = typed[Constants.DATA_TYPE]
+        cls.CTYPE_DIST = typed[Constants.DATA_TYPE_DIST]
         
-        cls.DEL_VAL = (1<<nb)-1
+        # Create both DEL_VAL for ind and for dists
+        cls.DEL_VAL_IND = (1<<nb)-1
+        
+        if cls.DATA_TYPE_DIST == 'float32':
+            cls.DEL_VAL_DIST = np.float32(np.finfo(np.float32).max)
+        elif cls.DATA_TYPE_DIST == 'float64':
+            cls.DEL_VAL_DIST = np.finfo(np.float64).max
+        else:
+            cls.DEL_VAL_DIST = (1<<nb)-1
         
         cls.OUT_DIR = os.path.realpath(outdir)
         cls.DATA_FILE_NAME = datafile
@@ -137,7 +162,7 @@ class Constants:
     @classmethod
     def mymin(cls,vec):
         """Retrieves minimum of a vec excluding DEL_VAL."""
-        inds = np.where(vec!=cls.DEL_VAL)[0]
+        inds = np.where(vec!=cls.DEL_VAL_IND)[0]
         tminind = np.argmin(vec[inds])
         minind = inds[tminind]
         minval = vec[minind]
@@ -229,7 +254,7 @@ class Constants:
             dij = minval
             ni = clusterSizeArr[ii]
             nj = clusterSizeArr[jj]
-            nkvec = clusterSizeArr[np.where(clusterSizeArr != Constants.DEL_VAL)]
+            nkvec = clusterSizeArr[np.where(clusterSizeArr != Constants.DEL_VAL_IND)]
 
 #            ai = (ni+nveci)/(ni+nj+nveci)
 #            aj = (nj+nvecj)/(ni+nj+nvecj)
@@ -238,13 +263,24 @@ class Constants:
             b = -nkvec/(ni+nj+nkvec)
             return ai*veci + aj*vecj + b*dij
         elif lo == "UPGMA":
-#            raise ValueError("%s not yet implemented." % cls.linkage_opt)
             # a_i = n_i/(n_i+n_j), b = 0, g = 0
             ni = clusterSizeArr[ii]
             nj = clusterSizeArr[jj]
-            ai = ni*(ni+nj)
-            aj = nj*(nj+nj)
-            return ai*veci + aj*vecj
+            ai = ni/float((ni+nj))
+            aj = nj/float((ni+nj))
+#            print("CLUSTERS", ii, jj)
+#            print("ni,nj",ni,nj)
+#            print("ai",ai)
+#            print("aj",aj)
+            ret = aj*vecj + ai*veci
+#            for k in range(len(vecj)):
+#                print("serverlwcheck",(ii,jj), "merge to", k, veci[k], vecj[k],ni,nj,ai,aj,ret[k])
+#            print("minscore", min([u for u in ret if u != Constants.DEL_VAL]))
+#            print("LW") 
+#            print(veci, veci[158])
+#            print(vecj, vecj[158])
+#            print(ai*veci[158] + aj*vecj[158])
+            return ret
         else:
             raise ValueError("Unknown linkage function %s" % cls.linkage_opt)
     

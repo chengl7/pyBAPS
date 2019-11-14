@@ -45,8 +45,10 @@ elif args.mode == "test":
         print("Running server...")
         gs.run_server(args.nMachine, args.globalHostName, [randomFastaFname1, randomFastaFname2], args.outDirs,args.linkage)
         print("Verifying solution 1...")
-        Z1 = np.load("%s/Z.npy" % args.outDirs[0])
-        Zval = cv.validation_cluster(randomFastaFname1, args.linkage)
+        Z = np.load("%s/Z.npy" % args.outDirs[0])
+        Zscipy = cv.validation_cluster(randomFastaFname1, args.linkage)
+        # Needs implementation
+        assert False
         print("Verifying solution 2...")
         Z2 = np.load("%s/Z.npy" % args.outDirs[1])
         cv.naive_verify(randomFastaFname2, Z2, args.linkage[0])
@@ -58,8 +60,8 @@ elif args.mode == "test":
         print("Running server...")
         gs.run_server(args.nMachine, args.globalHostName, args.inputFiles, args.outDirs,args.linkage)
         print("Verifying solution...")
-        Z2 = np.load("%s/Z.npy" % args.outDirs[0])
-        cv.naive_verify(args.inputFiles[0], Z2, args.linkage[0])
+        Z = np.load("%s/Z.npy" % args.outDirs[0])
+        cv.naive_verify(args.inputFiles[0], Z, args.linkage[0])
         print("Tests passed!")
 
 

@@ -19,6 +19,7 @@ from distlink.common.misc import preproc_fasta
 from distlink.common.misc import split_list
 from distlink.common.constants import Constants
 from distlink.common.server import Server
+from distlink.tests.cluster_val import LwTester
 
 import logging
 loggingFormatter = logging.Formatter('%(asctime)s - %(processName)s - %(levelname)s - %(message)s')
@@ -64,8 +65,8 @@ class GlobalServer(Server):
              nChild=nChild, childConns=childConns, childBlockList=childBlockList, logFile=logFile) 
         
         self.blockFlag = np.frombuffer(blockFlagPtr, dtype=bool)
-        self.veci = np.frombuffer(veciPtr, dtype=Constants.DATA_TYPE)
-        self.vecj = np.frombuffer(vecjPtr, dtype=Constants.DATA_TYPE)
+        self.veci = np.frombuffer(veciPtr, dtype=Constants.DATA_TYPE_DIST)
+        self.vecj = np.frombuffer(vecjPtr, dtype=Constants.DATA_TYPE_DIST)
         self.mati = self.veci.reshape((Constants.N_BLOCK,Constants.BLOCK_SIZE))
         self.matj = self.vecj.reshape((Constants.N_BLOCK,Constants.BLOCK_SIZE))
     
@@ -126,21 +127,42 @@ def core_algo(origConn, veci, vecj, mati, matj, nodeFlag, blockCount, blockFlag)
     logger.debug('enter core_algo')
     treeNodeArr=np.arange(Constants.N_NODE,dtype=Constants.DATA_TYPE)
     clusterSizeArr=np.ones(Constants.N_NODE)
-    Z = np.zeros((Constants.N_NODE-1,3),dtype=Constants.DATA_TYPE)
-    
+#    Z = np.zeros((Constants.N_NODE-1,3),dtype=Constants.DATA_TYPE)
+    # JS: since Z may contain both floats/doubles and ints, since it is
+    # Saved in one numpy file, we will choose the maximum float size
+    # Required to precisely represent all (1,2..N_NODE) integers, or
+    # The data type dist, whichever is bigger
+    Z = np.zeros((Constants.N_NODE-1,3),dtype=Constants.Z_TYPE)    
     logger.debug('update child block List')
     origConn.send(['update_child_block_list',])
     origConn.recv()
+    lwtester = LwTester(Constants.linkage_opt[0], Constants.DATA_FILE_NAME)
     
     for iStep in range(Constants.N_NODE-1):
         origConn.send(['get_min',])
         minturple = origConn.recv()
         ii,jj,minval = minturple.get_turple()
-        assert ii!=Constants.DEL_VAL and jj!=Constants.DEL_VAL, (ii,jj,minval)
+        assert ii!=Constants.DEL_VAL_IND and jj!=Constants.DEL_VAL_IND, (ii,jj,minval)
         
         logger.info('%dth step, merge index-node %d-%d and %d-%d.\n' % (iStep,ii,treeNodeArr[ii],jj,treeNodeArr[jj]))
-        Z[iStep,0:2] = np.sort(treeNodeArr[[ii,jj]])
+        # JS: For now do not sort, because an unsorted [l,r] in Z where
+        # l = n(ii) and r = n(jj) can be used to know which node was deleted
+        # I.e. we can infer alone from Z the position of a cluster
+        # In the array
+        # This is useful for testing
+        # And I cant currently see why this would be a problem
+#        Z[iStep,0:2] = np.sort(treeNodeArr[[ii,jj]])
+        Z[iStep,0:2] = treeNodeArr[[ii,jj]]
         Z[iStep,2] = minval
+        print()
+        print("CORE ALGORITHM MERGING:", Z[iStep], ii, jj)
+
+        lwtester.testminval(Z[:iStep],ii,jj,minval,Constants.N_NODE)
+#        print("coreZ",ii,jj,treeNodeArr[[ii,jj]], iStep+Constants.N_NODE,iStep, Z[iStep])
+#        print(Z[-1])
+#        Z[iStep,2] = minval
+        for zi in range(iStep):
+            print(Constants.N_NODE+zi,Z[zi])
         
         # merge ii and jj, update distance matrix
         # extract jjth row and delete it
@@ -160,19 +182,22 @@ def core_algo(origConn, veci, vecj, mati, matj, nodeFlag, blockCount, blockFlag)
             origConn.send(['del_blocks',bjj])
             origConn.recv()
         
+        lwtester.testri(Z[:iStep],ii,jj,veci,vecj)
         # update distance of the merged node of ii and jj
-        update_pair_dist(nodeFlag, veci, vecj, clusterSizeArr, ii, jj, minval)
+        lw = update_pair_dist(nodeFlag, veci, vecj, clusterSizeArr, ii, jj, minval)
+        # manually calculate lw
+        lwtester.testlw(Z[:iStep],ii,jj,lw,Constants.N_NODE,Constants.DEL_VAL_DIST)
         
         # insert row ii into the blocks
         origConn.send(['ins_row',ii,'mati'])
         origConn.recv()
                     
         treeNodeArr[ii] = iStep+Constants.N_NODE
-        treeNodeArr[jj] = Constants.DEL_VAL
+        treeNodeArr[jj] = Constants.DEL_VAL_IND
         
         # Update the cluster size array for linkage functions requiring n_i (eg ward)
-        clusterSizeArr[ii] += 1
-        clusterSizeArr[jj] = Constants.DEL_VAL
+        clusterSizeArr[ii] += clusterSizeArr[jj]
+        clusterSizeArr[jj] = Constants.DEL_VAL_IND
 #        clusterSizeArr = np.delete(clusterSizeArr,jj)
 
     return Z
@@ -187,7 +212,17 @@ def update_pair_dist(nodeFlag, veci, vecj, nvec=None, i=None, j=None, minval=Non
         nvec: for more advanced linkage, n is cluster sizes
     """
 #    veci[nodeFlag] = np.maximum(veci[nodeFlag],vecj[nodeFlag])
-    veci[nodeFlag] = Constants.lance_williams(veci[nodeFlag], vecj[nodeFlag], nvec, i, j,minval)
+    lw = Constants.lance_williams(veci[nodeFlag], vecj[nodeFlag], nvec, i, j, minval)
+    # Lance-Williams changes DEL_VALS (does not happen with max
+    # because DEL_VAL is always max
+    # Is this correct? If DEL_VAL is correctly specified?
+    # mask with DEL_VALs 
+    # JS: veci includes a zero for self-distances of zero distance if it is ii
+    # But no index for jj
+    # Also seems veci is BLOCK_SIZE*BLOCK_SIZE long; rather than N_NODE long;
+    # it is zero padded
+    veci[nodeFlag] = lw
+    return lw
 
 def task_gen(nBlock):
     """Generate triangular indices (bi,bj)."""
@@ -212,12 +247,12 @@ def init_global_vars():
     
     global blockFlagPtr, veciPtr, vecjPtr
     blockFlagPtr = RawArray(Constants.TYPE_TBL['bool'], Constants.N_BLOCK)
-    veciPtr = RawArray(Constants.CTYPE, Constants.N_BLOCK*Constants.BLOCK_SIZE)
-    vecjPtr = RawArray(Constants.CTYPE, Constants.N_BLOCK*Constants.BLOCK_SIZE)
+    veciPtr = RawArray(Constants.CTYPE_DIST, Constants.N_BLOCK*Constants.BLOCK_SIZE)
+    vecjPtr = RawArray(Constants.CTYPE_DIST, Constants.N_BLOCK*Constants.BLOCK_SIZE)
     
     blockFlag = np.frombuffer(blockFlagPtr, dtype=bool)
-    veci = np.frombuffer(veciPtr, dtype=Constants.DATA_TYPE)
-    vecj = np.frombuffer(vecjPtr, dtype=Constants.DATA_TYPE)
+    veci = np.frombuffer(veciPtr, dtype=Constants.DATA_TYPE_DIST)
+    vecj = np.frombuffer(vecjPtr, dtype=Constants.DATA_TYPE_DIST)
     mati = veci.reshape((Constants.N_BLOCK,Constants.BLOCK_SIZE))
     matj = vecj.reshape((Constants.N_BLOCK,Constants.BLOCK_SIZE))
     

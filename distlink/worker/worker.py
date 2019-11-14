@@ -109,10 +109,10 @@ def cal_dist_block(outDir, bi, bj):
     np.copyto(XJ,Xj)
     
     bs = Constants.BLOCK_SIZE
-    bmatPtr = RawArray(Constants.CTYPE, bs*bs)
-    bmatType = Constants.DATA_TYPE
+    bmatPtr = RawArray(Constants.CTYPE_DIST, bs*bs)
+    bmatType = Constants.DATA_TYPE_DIST
     bmatShape = (bs,bs)
-    bmat = np.frombuffer(bmatPtr, dtype=Constants.DATA_TYPE).reshape(bs,bs)
+    bmat = np.frombuffer(bmatPtr, dtype=Constants.DATA_TYPE_DIST).reshape(bs,bs)
     
     distList = list()
     indsi = Constants.get_block_inds(bi)

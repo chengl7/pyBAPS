@@ -29,6 +29,7 @@ class Block:
         """
         assert(bi<=bj)
         self.bmat = np.load(Constants.get_dist_block_file(bi,bj))
+        print(self.bmat)
         
         self.browflag = np.ones(Constants.BLOCK_SIZE, dtype=bool)
         self.bcolflag = np.ones(Constants.BLOCK_SIZE, dtype=bool)
@@ -43,31 +44,31 @@ class Block:
             self.bcolflag[0]=False
         self.count = int(np.sum(self.browflag)) 
         
-        self.minHedVal = Constants.DEL_VAL
-        self.minInd = (Constants.DEL_VAL,Constants.DEL_VAL)
+        self.minHedVal = Constants.DEL_VAL_DIST
+        self.minInd = (Constants.DEL_VAL_IND,Constants.DEL_VAL_IND)
         
         self.bi = bi
         self.bj = bj
         
         self.hedInd = np.zeros(Constants.BLOCK_SIZE, dtype=Constants.DATA_TYPE)
-        self.hedVal = np.zeros(Constants.BLOCK_SIZE, dtype=Constants.DATA_TYPE)
+        self.hedVal = np.zeros(Constants.BLOCK_SIZE, dtype=Constants.DATA_TYPE_DIST)
         self.update_batch_head(range(Constants.BLOCK_SIZE))   # minInd, minHedVal updated
     
     # return a tuple that is the minimum, should be call when minHedVal is not DEL_VAL
     def get_min_tuple(self):
         """Calculate and return the tuple with minimum value."""
-        if self.minHedVal==Constants.DEL_VAL:
-            delval = Constants.DEL_VAL
-            return MinTurple(delval,delval,delval)
+        if self.minHedVal==Constants.DEL_VAL_DIST:
+#            delval = Constants.DEL_VAL
+            return MinTurple(Constants.DEL_VAL_IND,Constants.DEL_VAL_IND,Constants.DEL_VAL_DIST)
         ii,jj=self.minInd
         mi = Constants.getmi(self.bi, ii)
         mj = Constants.getmi(self.bj, jj)
         return MinTurple(mi,mj,self.minHedVal)
         
     def __le__(self,obj):
-        if self.minHedVal==Constants.DEL_VAL:
+        if self.minHedVal==Constants.DEL_VAL_DIST:
             return False
-        elif obj.minHedVal==Constants.DEL_VAL:
+        elif obj.minHedVal==Constants.DEL_VAL_DIST:
             return True
         else:
             return self.minHedVal <= obj.minHedVal
@@ -110,8 +111,8 @@ class Block:
             i: local index specifying data element.
         """
         if not self.browflag[i]:
-            self.hedInd[i] = Constants.DEL_VAL
-            self.hedVal[i] = Constants.DEL_VAL
+            self.hedInd[i] = Constants.DEL_VAL_IND
+            self.hedVal[i] = Constants.DEL_VAL_DIST
             return
         if self.bi!=self.bj:
             valinds = np.where(self.bcolflag)[0]
@@ -119,8 +120,8 @@ class Block:
             valinds = i+1+np.where(self.bcolflag[i+1:])[0]
         
         if valinds.size==0:
-            self.hedInd[i] = Constants.DEL_VAL
-            self.hedVal[i] = Constants.DEL_VAL
+            self.hedInd[i] = Constants.DEL_VAL_IND
+            self.hedVal[i] = Constants.DEL_VAL_DIST
         else:
             tmpminind = np.argmin(self.bmat[i,valinds])
             self.hedInd[i] = valinds[tmpminind]
@@ -144,8 +145,8 @@ class Block:
         """Find the row i with the closest neighbor j."""
         if self.count<=0:
             assert not any(self.browflag)
-            self.minHedVal = Constants.DEL_VAL
-            self.minInd = (Constants.DEL_VAL,Constants.DEL_VAL)
+            self.minHedVal = Constants.DEL_VAL_DIST
+            self.minInd = (Constants.DEL_VAL_IND,Constants.DEL_VAL_IND)
         else:
             valinds = np.where(self.browflag)[0]
             rowind = np.argmin(self.hedVal[valinds])

@@ -316,9 +316,9 @@ class MinTurple:
         return str(self.get_turple())
     
     def __le__(self,obj):
-        if self.minVal==Constants.DEL_VAL:
+        if self.minVal==Constants.DEL_VAL_DIST:
             return False
-        elif obj.minVal==Constants.DEL_VAL:
+        elif obj.minVal==Constants.DEL_VAL_DIST:
             return True
         else:
             return self.minVal <= obj.minVal
