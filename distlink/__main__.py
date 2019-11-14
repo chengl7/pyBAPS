@@ -16,7 +16,7 @@ args = parser.parse_args()
 if args.mode == "server":
     if (args.inputFiles is None or args.outDirs is None):
         parser.error("Server requires both -inputFiles and -outDirs to be specified")
-    gs.run_server(args.nMachine, args.globalHostName, args.inputFiles, args.outDirs, args.linkage, args.dist)
+    gs.run_server(args.nMachine, args.globalHostName, args.inputFiles, args.outDirs, args.linkage, args.dist[0])
 
 elif args.mode == "worker":
     wo.run_worker(args.globalHostName)
@@ -44,7 +44,7 @@ elif args.mode == "test":
         gd.write_random_fasta(randomFastaFname1, 20, 50001) 
         gd.write_random_fasta(randomFastaFname2, 201, 11) 
         print("Running server...")
-        gs.run_server(args.nMachine, args.globalHostName, [randomFastaFname1, randomFastaFname2], args.outDirs,args.linkage,args.dist)
+        gs.run_server(args.nMachine, args.globalHostName, [randomFastaFname1, randomFastaFname2], args.outDirs,args.linkage,args.dist[0])
         print("Verifying solution 1...")
         Z = np.load("%s/Z.npy" % args.outDirs[0])
         Zscipy = cv.validation_cluster(randomFastaFname1, args.linkage)
@@ -52,17 +52,17 @@ elif args.mode == "test":
         assert False
         print("Verifying solution 2...")
         Z2 = np.load("%s/Z.npy" % args.outDirs[1])
-        cv.naive_verify(randomFastaFname2, Z2, args.linkage[0])
+        cv.naive_verify(randomFastaFname2, Z2, args.linkage[0],args.dist[0])
         print("Tests passed!")
     else:
         if len(args.inputFiles) > 1:
             print("For testing, only one input file can be specified")
             sys.exit(1)
         print("Running server...")
-        gs.run_server(args.nMachine, args.globalHostName, args.inputFiles, args.outDirs,args.linkage,args.dist)
+        gs.run_server(args.nMachine, args.globalHostName, args.inputFiles, args.outDirs,args.linkage,args.dist[0],test=True)
         print("Verifying solution...")
         Z = np.load("%s/Z.npy" % args.outDirs[0])
-        cv.naive_verify(args.inputFiles[0], Z, args.linkage[0])
+        cv.naive_verify(args.inputFiles[0], Z, args.linkage[0],args.dist[0])
         print("Tests passed!")
 
 

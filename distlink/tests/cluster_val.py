@@ -1,11 +1,13 @@
 from scipy.cluster.hierarchy import linkage
 import numpy as np
+import sys
+np.set_printoptions(threshold=sys.maxsize)
 from distlink.common.misc import fasta_iter
 from math import fabs
 
 class LwTester():
     """Object for testing Lance-Williams dissimilarity update on every step."""
-    def __init__(self, linkage, fastaFileName):
+    def __init__(self, linkage, fastaFileName,dist):
         """
         Args:
             linkage: linkage string.
@@ -14,9 +16,22 @@ class LwTester():
         self.linkage = linkage
         seqs = np.array([s for h,s in fasta_iter(fastaFileName)])
         self.dmat = np.zeros((len(seqs), len(seqs)))
+#        print(dist)
         for si in range(len(seqs)):
             for sj in range(len(seqs)):
-                self.dmat[si,sj] = hamming(seqs[si], seqs[sj])
+                if dist == "Hamming":
+                    self.dmat[si,sj] = hamming(seqs[si], seqs[sj])
+                elif dist == "Euclidean":
+                    self.dmat[si,sj] = np.linalg.norm(seqs[si]-seqs[sj])
+#                    print(seqs[si], seqs[sj])
+                    diff1 = seqs[si]-seqs[sj]
+                    diff2 = seqs[sj]-seqs[si]
+#                    print(diff1)
+#                    print(diff2)
+#                    print(si,sj,seqs[si],seqs[sj],np.linalg.norm(diff1))
+#                    print(sj,si,seqs[sj],seqs[si],np.linalg.norm(diff2))
+                    assert self.dmat[si,sj] == np.linalg.norm(seqs[sj]-seqs[si]), "%f,%f,%f"% (self.dmat[si,sj],np.linalg.norm(seqs[sj]-seqs[si]), np.linalg.norm(seqs[si]-seqs[sj]))
+#                self.dmat[sj,si] = self.dmat[si,sj]
         self.N_NODE = len(self.dmat)
 
     def testri(self, Zinc, ii,jj,rowi,rowj):
@@ -32,17 +47,24 @@ class LwTester():
                 aka last index of leaf merged from left
         """
         all_clusters = retrieve_all_clusters(Zinc, self.N_NODE)
+#        print(all_clusters)
         all_clusters = {key:val for key,val in all_clusters}
         cii = ii
         cjj = jj
         clusterii = all_clusters[ii]
         clusterjj = all_clusters[jj]
+#        print(clusterii)
+#        print(clusterjj)
         TEST_EPS = 0.000000001
         for ckk, clusterkk in all_clusters.items():
             if ckk != cii and ckk != cjj:
                 cikd = cluster_dist(clusterii,clusterkk,self.linkage,self.dmat)
-                assert fabs(rowi[ckk] - cikd) < TEST_EPS
-                assert fabs(rowj[ckk] - cluster_dist(clusterjj,clusterkk,self.linkage,self.dmat)) < TEST_EPS
+                cjkd = cluster_dist(clusterjj,clusterkk,self.linkage,self.dmat)
+#                print(ii,clusterii,clusterkk,cikd,rowi[ckk])
+#                print(jj,clusterjj,clusterkk,cjkd,rowj[ckk])
+                assert fabs(rowi[ckk] - cikd) < TEST_EPS, "%f,%f not close enough" % (rowi[ckk], cikd)
+                assert fabs(rowj[ckk] - cjkd) < TEST_EPS, "%f,%f not close enough" % (rowi[ckk], cikd)
+
         return True        
         
     def testlw(self, Zinc,ii,jj,lw,N_NODE,DEL_VAL_DIST):
@@ -116,10 +138,11 @@ class LwTester():
         return True
 
 def hamming(s1,s2,w=None):
-    """Hamming distance for strings."""
+    """Hamming distance for iterables."""
     # JS: scipy hamming distance seems to be normalized as h/n, instead of h
     # JS: can use numpy.not equal after converting to list
-    return len([i for i in range(len(s1)) if s1[i] != s2[i]])
+#    return len([i for i in range(len(s1)) if s1[i] != s2[i]])
+    return sum(np.not_equal(s1,s2))
 
 def retrieve_all_clusters(Zinc,n_nodes):
     """Retrieve all currenct clusters in Z so far.
@@ -241,8 +264,7 @@ def cv_step():
     minscore = min(cluster_scores)
     return minscore == score
 
-
-def naive_verify(fastaFileName, Z, linkage):
+def naive_verify(fastaFileName, Z, linkage, dist):
     """ Provide a naive validation of a solution Z. 
     
     Since for complete linkage, at least, non-uniqueness applies, we cannot
@@ -260,7 +282,10 @@ def naive_verify(fastaFileName, Z, linkage):
     dmat = np.zeros((len(seqs), len(seqs)))
     for si in range(len(seqs)):
         for sj in range(len(seqs)):
-            dmat[si,sj] = hamming(seqs[si], seqs[sj])
+            if dist == "Hamming":
+                dmat[si,sj] = hamming(seqs[si], seqs[sj])
+            elif dist == "Euclidean":
+                dmat[si,sj] = np.linalg.norm(seqs[si]-seqs[sj])
  
     k = len(seqs)
     clusters = {i:[[i],None] for i in range(len(seqs))}

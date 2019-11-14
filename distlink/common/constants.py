@@ -65,6 +65,7 @@ class Constants:
             distopt: distance function.
         """
         cls.linkage_opt = linkage
+        cls.distopt = distopt
         cls.N_NODE = n
         assert(n*(n+1)>10*nMachine)
         
@@ -102,7 +103,7 @@ class Constants:
 #               logger.error("Cannot use integer type for complete linkage criterion")
 #                raise ValueError("uint type incompatible with complete linkage criterion")
         
-        types = [ct.c_bool, ct.c_short, ct.c_ubyte, ct.c_ushort, ct.c_uint, ct.c_int, ct.c_long, ct.c_ulong, ct.c_float, ct.c_double]
+        types = [ct.c_bool, ct.c_short, ct.c_ubyte, ct.c_ushort, ct.c_uint, ct.c_int8, ct.c_int, ct.c_long, ct.c_ulong, ct.c_float, ct.c_double]
         typed = {str(np.dtype(ctype)): ctype for ctype in types}
         cls.TYPE_TBL = typed
 #        cls.CTYPE = typed[Constants.DATA_TYPE]
@@ -226,14 +227,15 @@ class Constants:
         if distopt=='Hamming':
             return cls.dist_hamming
         elif distopt=='Euclidean':
-            assert cls.DATA_TYPE=='uint32', 'Data type must be uint32 when using this distance'
+#            assert cls.DATA_TYPE=='uint32', 'Data type must be uint32 when using this distance'
             return cls.dist_eclidean32
         else:
             raise Exception(f'Unknown distance option: {distopt}, should be Hamming or Euclidean.')
         
     @staticmethod    
     def dist_eclidean32(x1,x2):
-        return np.uint32(np.sqrt(np.sqrt(np.sum((x1-x2)**2)))*1000000)
+        return np.linalg.norm(x1-x2)
+#        return np.uint32(np.sqrt(np.sqrt(np.sum((x1-x2)**2)))*1000000)
     
     @staticmethod
     def dist_hamming(x1,x2):

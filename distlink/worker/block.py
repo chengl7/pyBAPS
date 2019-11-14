@@ -29,7 +29,7 @@ class Block:
         """
         assert(bi<=bj)
         self.bmat = np.load(Constants.get_dist_block_file(bi,bj))
-        print(self.bmat)
+#        print(self.bmat)
         
         self.browflag = np.ones(Constants.BLOCK_SIZE, dtype=bool)
         self.bcolflag = np.ones(Constants.BLOCK_SIZE, dtype=bool)

@@ -137,7 +137,7 @@ def core_algo(origConn, veci, vecj, mati, matj, nodeFlag, blockCount, blockFlag,
     origConn.send(['update_child_block_list',])
     origConn.recv()
     if test:
-        lwtester = LwTester(Constants.linkage_opt[0], Constants.DATA_FILE_NAME)
+        lwtester = LwTester(Constants.linkage_opt[0], Constants.DATA_FILE_NAME, Constants.distopt)
     
     for iStep in range(Constants.N_NODE-1):
         origConn.send(['get_min',])
@@ -482,7 +482,7 @@ def parse_input(args):
     outDirs = args[4::2]
     return (nMachine, globalHostName, inputFiles, outDirs)
     
-def run_server(nMachine, globalHostName, inputFiles, outDirs,linkage,distopt='Hamming'):
+def run_server(nMachine, globalHostName, inputFiles, outDirs,linkage,distopt='Hamming',test=False):
     """Setup network and execute core linkage algorithm."""
     
     memMonitor = Process(target=disp_usage_forever,args=(logger.info,),name="Server Node")
@@ -517,7 +517,7 @@ def run_server(nMachine, globalHostName, inputFiles, outDirs,linkage,distopt='Ha
             logger.warn(f'input file "{infile}" does not exist, quit!')
             continue
         # step 1: preprocess input data, initialize Constants
-        [n,d] = preproc_fasta(infile, outDir,nMachine,linkage)  # Constants initialized here
+        [n,d] = preproc_fasta(infile, outDir,nMachine,linkage,distopt)  # Constants initialized here
 
         # JS: temporarily set the linkage here
 
@@ -545,7 +545,7 @@ def run_server(nMachine, globalHostName, inputFiles, outDirs,linkage,distopt='Ha
         origConn,globalServer = setup_network(nMachine, globalHostName, initHostArr, initConnArr)
     
         # step 4: running the core linkage algorithm, save the result
-        Z = core_algo(origConn, veci, vecj, mati, matj, nodeFlag, blockCount, blockFlag)
+        Z = core_algo(origConn, veci, vecj, mati, matj, nodeFlag, blockCount, blockFlag,test)
         resfile = Constants.get_res_file('Z.npy')
         np.save(resfile,Z)
     
