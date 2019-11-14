@@ -482,7 +482,7 @@ def parse_input(args):
     outDirs = args[4::2]
     return (nMachine, globalHostName, inputFiles, outDirs)
     
-def run_server(nMachine, globalHostName, inputFiles, outDirs,linkage):
+def run_server(nMachine, globalHostName, inputFiles, outDirs,linkage,distopt='Hamming'):
     """Setup network and execute core linkage algorithm."""
     
     memMonitor = Process(target=disp_usage_forever,args=(logger.info,),name="Server Node")
@@ -522,7 +522,7 @@ def run_server(nMachine, globalHostName, inputFiles, outDirs,linkage):
         # JS: temporarily set the linkage here
 
         logger.info(f'start processing input file: {infile}, outDir={outDir}')
-        initargs = (n,d,infile,outDir,nMachine,linkage)
+        initargs = (n,d,infile,outDir,nMachine,linkage,distopt)
         Constants.init(*initargs)
         for i in range(nMachine):
             initConnArr[i].send(['Constants',*initargs])

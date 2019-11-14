@@ -50,7 +50,7 @@ class Constants:
     linkage_opt = None
     
     @classmethod
-    def init(cls, n, xlen, datafile, outdir, nMachine, linkage,nBlock=None, distopt='Hamming'):
+    def init(cls, n, xlen, datafile, outdir, nMachine, linkage, distopt, nBlock=None):
         """Initialize with basic constants, compute derived constants.
 
         Args:
