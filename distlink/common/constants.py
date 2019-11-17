@@ -50,7 +50,7 @@ class Constants:
     linkage_opt = None
     
     @classmethod
-    def init(cls, n, xlen, datafile, outdir, nMachine, linkage, distopt, nBlock=None):
+    def init(cls, n, xlen, datafile, outdir, nMachine, linkage, distopt, dtype=None, nBlock=None):
         """Initialize with basic constants, compute derived constants.
 
         Args:
@@ -59,10 +59,12 @@ class Constants:
             datafile: filename of base data.
             outdir: name of directory where output files are generated.
             nMachine: number of machines in network.
+            linkage: linkage criterion (single, complete, UPGMA)
+            distopt: distance function (euclidean, hamming)
 
         Keyword args:
             nBlock: optionally specified number of blocks. Otherwise calculated.
-            distopt: distance function.
+            dtype: optionally specified floating point data type for floating distances
         """
         cls.linkage_opt = linkage
         cls.distopt = distopt
@@ -85,23 +87,44 @@ class Constants:
         cls.BLOCK_SIZE = int(np.ceil(n/cls.N_BLOCK))
         
 #        nb = cls.choose_data_bits(max(n,xlen))
-        # JS: try 2 different data types; one for indices (bits required to store integers up to n
-        # JS: one for distances
+        # JS: try 2 different data types; one for indices (bits required to store integers up to n)
+        # JS: one for distances (bits required to store integers up to 
         nb = cls.choose_data_bits(n)
         
         cls.DATA_TYPE = 'uint'+str(nb)
         type_dist_domain = 'float'
-        type_dist_bits = 64
-        cls.DATA_TYPE_DIST = type_dist_domain+str(type_dist_bits)
-        zbits = max(nb, type_dist_bits)
-        # float64 can repesent 
-        cls.Z_TYPE = type_dist_domain+str(zbits)
+    
+        if dtype == None:
+            # If no data type is provided, estimate
+            if linkage in ["UPGMA"]:
+                logger.error("dtype must be provided for UPGMA")
+                raise ValueError("dtype must be provided for UPGMA")
+            if distopt in ["euclidean"]
+                logger.error("dtype must be provided for euclidean distances")
+                raise ValueError("dtype must be provided for euclidean distances")
 
-#        if linkage not in ["Single", "Complete"]:
-#            cls.DATA_TYPE = 'float64'
-#            if cls.DATA_TYPE.startswith('uint'):
-#               logger.error("Cannot use integer type for complete linkage criterion")
-#                raise ValueError("uint type incompatible with complete linkage criterion")
+            # If hamming, need largest bits require to store
+            # Max hamming distance, which is maxxlen
+            distbits = cls.choose_data_bits(xlen)    
+            type_dist_bits = distbits
+            # Z linkage result needs to store largest of the types
+            zbits = max(nb, type_dist_bits)
+            # float64 can repesent 
+            cls.Z_TYPE = type_dist_domain+str(zbits)
+        else:
+            if dtype == "float32":
+                cls.DATA_TYPE_DIST = np.float32
+                cls.Z_TYPE = np.float32
+                assert n < 2**23
+            elif dtype == "float64":
+                cls.DATA_TYPE_DIST = np.float64
+                cls.Z_TYPE = np.float64
+                assert n < 2**53
+            # JS: note that float32 has 23 bit mantissa,
+            # stores 2^23 integers precisely
+            # double stores 2^53
+            # should always be acceptable 
+            
         
         types = [ct.c_bool, ct.c_short, ct.c_ubyte, ct.c_ushort, ct.c_uint, ct.c_int8, ct.c_int, ct.c_long, ct.c_ulong, ct.c_float, ct.c_double]
         typed = {str(np.dtype(ctype)): ctype for ctype in types}
@@ -228,14 +251,24 @@ class Constants:
             return cls.dist_hamming
         elif distopt=='Euclidean':
 #            assert cls.DATA_TYPE=='uint32', 'Data type must be uint32 when using this distance'
-            return cls.dist_eclidean32
+            return cls.dist_euclidean
         else:
             raise Exception(f'Unknown distance option: {distopt}, should be Hamming or Euclidean.')
-        
-    @staticmethod    
-    def dist_eclidean32(x1,x2):
+
+    @staticmethod
+    def dist_euclidean(x1,x2):
+        # JS: Return type is the same as dtypes of x1,x2
+        # JS: Specify floating point 
         return np.linalg.norm(x1-x2)
+        
+#    @staticmethod    
+#    def dist_eclidean32(x1,x2):
+#        return np.float32(np.linalg.norm(x1-x2))
 #        return np.uint32(np.sqrt(np.sqrt(np.sum((x1-x2)**2)))*1000000)
+
+#    @staticmethod    
+#    def dist_eclidean16(x1,x2):
+#        return np.float16(np.linalg.norm(x1-x2))
     
     @staticmethod
     def dist_hamming(x1,x2):
