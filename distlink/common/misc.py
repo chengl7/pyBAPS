@@ -112,7 +112,9 @@ def seq2int(seq):
         arr (numpy.array): len(seq) x 1 array
     """
     base = {'A': 1, 'C': 2, 'G': 3, 'T': 4, 'a': 1, 'c': 2, 'g': 3, 't': 4}
-    arr = np.zeros(len(seq), dtype='uint8') 
+#    arr = np.zeros(len(seq), dtype='uint8') 
+    # JS : uint incompatible with simple vector difference (and subsequent norm/euclidean distance)
+    arr = np.zeros(len(seq), dtype='int8') 
     for i, tb in enumerate(seq):
         if tb in base:
             arr[i] = base[tb]
@@ -128,7 +130,8 @@ def read_fasta(fastaFileName,snpflag=False):
         seqAln: sequence alignment in numpy.array.
     """
     nseq, seqLen, snpinds = count_fasta(fastaFileName,snpflag)
-    seqAln = np.zeros((nseq,len(snpinds)), dtype='uint8')
+    # JS: changed to int8 as before
+    seqAln = np.zeros((nseq,len(snpinds)), dtype='int8')
     headers = list()
     for i,x in enumerate(fasta_iter(fastaFileName,snpinds)):
         hed, seq_int = x
@@ -207,7 +210,7 @@ def split_list(inList, nSubList):
     return resList
     
 #from server2 import Constants
-def preproc_fasta(fastaFileName, outDir,nMachine,linkage):
+def preproc_fasta(fastaFileName, outDir,nMachine,linkage,distopt,dtype):
     #! JS: does this function have too many responsibilities?
     #! JS: e.g. initializing constants doesn't seem to be part
     #! JS: of file preprocessing. 
@@ -236,7 +239,7 @@ def preproc_fasta(fastaFileName, outDir,nMachine,linkage):
     
     
     n,d = seqAln.shape
-    Constants.init(n,d,fastaFileName,outDir,nMachine,linkage)
+    Constants.init(n,d,fastaFileName,outDir,nMachine,linkage,distopt,dtype)
 
     
     dataDir = Constants.DATA_DIR

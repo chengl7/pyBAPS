@@ -10,12 +10,12 @@ parser.add_argument("-inputFiles", nargs='+', type=str, default=None)
 parser.add_argument("-outDirs",nargs='+', type=str, default=None)
 parser.add_argument("-linkage", choices=["UPGMA", "complete", "single"],type=str, default=None)
 parser.add_argument("-dist", choices=["hamming","euclidean"], type=str, default=None)
-parser.add_argument("-dtype", choices=["uint16", "uint32", "uint64", "float32", "float64"], type=str, default=None)
+parser.add_argument("-dtype", choices=["uint8", "uint16", "uint32", "uint64", "float32", "float64"], type=str, default=None)
 
 args = parser.parse_args()
 
 if args.dist == "euclidean" or args.dist in ["UPGMA"]:
-    if args.dtype == None:
+    if args.dtype not in ["float32", "float64"]:
         parser.error("The chosen distance/linkage requires a dtype to be specified (float32,float64)")
 
 if args.mode == "server":
@@ -57,7 +57,7 @@ elif args.mode == "test":
         assert False
         print("Verifying solution 2...")
         Z2 = np.load("%s/Z.npy" % args.outDirs[1])
-        cv.naive_verify(randomFastaFname2, Z2, args.linkage,args.dist,args.dtype)
+        cv.naive_verify(randomFastaFname2, Z2, args.linkage,args.dist)
         print("Tests passed!")
     else:
         if len(args.inputFiles) > 1:
@@ -67,7 +67,7 @@ elif args.mode == "test":
         gs.run_server(args.nMachine, args.globalHostName, args.inputFiles, args.outDirs,args.linkage,args.dist, args.dtype,test=True)
         print("Verifying solution...")
         Z = np.load("%s/Z.npy" % args.outDirs[0])
-        cv.naive_verify(args.inputFiles[0], Z, args.linkage[0],args.dist,args.dtype)
+        cv.naive_verify(args.inputFiles[0], Z, args.linkage,args.dist)
         print("Tests passed!")
 
 

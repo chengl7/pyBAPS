@@ -2,6 +2,7 @@ from scipy.cluster.hierarchy import linkage
 import numpy as np
 import sys
 np.set_printoptions(threshold=sys.maxsize)
+np.set_printoptions(floatmode="maxprec")
 from distlink.common.misc import fasta_iter
 from math import fabs
 
@@ -16,22 +17,15 @@ class LwTester():
         self.linkage = linkage
         seqs = np.array([s for h,s in fasta_iter(fastaFileName)])
         self.dmat = np.zeros((len(seqs), len(seqs)))
-#        print(dist)
         for si in range(len(seqs)):
             for sj in range(len(seqs)):
-                if dist == "Hamming":
+                if dist == "hamming":
                     self.dmat[si,sj] = hamming(seqs[si], seqs[sj])
-                elif dist == "Euclidean":
+                elif dist == "euclidean":
                     self.dmat[si,sj] = np.linalg.norm(seqs[si]-seqs[sj])
-#                    print(seqs[si], seqs[sj])
                     diff1 = seqs[si]-seqs[sj]
                     diff2 = seqs[sj]-seqs[si]
-#                    print(diff1)
-#                    print(diff2)
-#                    print(si,sj,seqs[si],seqs[sj],np.linalg.norm(diff1))
-#                    print(sj,si,seqs[sj],seqs[si],np.linalg.norm(diff2))
                     assert self.dmat[si,sj] == np.linalg.norm(seqs[sj]-seqs[si]), "%f,%f,%f"% (self.dmat[si,sj],np.linalg.norm(seqs[sj]-seqs[si]), np.linalg.norm(seqs[si]-seqs[sj]))
-#                self.dmat[sj,si] = self.dmat[si,sj]
         self.N_NODE = len(self.dmat)
 
     def testri(self, Zinc, ii,jj,rowi,rowj):
@@ -47,21 +41,16 @@ class LwTester():
                 aka last index of leaf merged from left
         """
         all_clusters = retrieve_all_clusters(Zinc, self.N_NODE)
-#        print(all_clusters)
         all_clusters = {key:val for key,val in all_clusters}
         cii = ii
         cjj = jj
         clusterii = all_clusters[ii]
         clusterjj = all_clusters[jj]
-#        print(clusterii)
-#        print(clusterjj)
-        TEST_EPS = 0.000000001
+        TEST_EPS = 0.0001
         for ckk, clusterkk in all_clusters.items():
             if ckk != cii and ckk != cjj:
                 cikd = cluster_dist(clusterii,clusterkk,self.linkage,self.dmat)
                 cjkd = cluster_dist(clusterjj,clusterkk,self.linkage,self.dmat)
-#                print(ii,clusterii,clusterkk,cikd,rowi[ckk])
-#                print(jj,clusterjj,clusterkk,cjkd,rowj[ckk])
                 assert fabs(rowi[ckk] - cikd) < TEST_EPS, "%f,%f not close enough" % (rowi[ckk], cikd)
                 assert fabs(rowj[ckk] - cjkd) < TEST_EPS, "%f,%f not close enough" % (rowi[ckk], cikd)
 
@@ -103,11 +92,11 @@ class LwTester():
                 manuallw.append(mlw)
                 active_clusters.append(ckk)
        
-        TEST_EPS = 0.000000001
+        TEST_EPS = 0.0001
         for mi in range(len(manuallw)):
             if mi <= N_NODE and comparisons[mi] != []:
                 if comparisons[mi][0] != comparisons[mi][2]:
-                    assert (fabs(manuallw[mi]-lw[mi]) < TEST_EPS)
+                    assert (fabs(manuallw[mi]-lw[mi]) < TEST_EPS), "manual lw failed; the new cluster distance should be %f, it was %f, difference %f" % (manuallw[mi],lw[mi], manuallw[mi]-lw[mi])
         return True
 
     def testminval(self, Z, ii, jj, minval, N_NODE):
@@ -133,15 +122,15 @@ class LwTester():
                 if cii != ckk and not (cii in all_clustered or ckk in all_clustered):
                     vals.append((cii,ckk,cluster_dist(clusterii,clusterkk,self.linkage,self.dmat)))
         manualminval = min(vals,key=lambda x:x[2])
-        TEST_EPS = 0.000000001
-        assert fabs(manualminval[2]-minval) < TEST_EPS
+        TEST_EPS = 0.0001
+        print(fabs(manualminval[2]-minval) < TEST_EPS, fabs(manualminval[2]-minval), TEST_EPS, type(minval))
+        assert fabs(manualminval[2]-minval) < TEST_EPS, "minimum val not correct, was %f, should be %f, error %f" %(manualminval[2],minval,manualminval[2]-minval)
         return True
 
 def hamming(s1,s2,w=None):
     """Hamming distance for iterables."""
     # JS: scipy hamming distance seems to be normalized as h/n, instead of h
     # JS: can use numpy.not equal after converting to list
-#    return len([i for i in range(len(s1)) if s1[i] != s2[i]])
     return sum(np.not_equal(s1,s2))
 
 def retrieve_all_clusters(Zinc,n_nodes):
@@ -225,7 +214,7 @@ def cluster_dist(cl1, cl2,linkage,dmat):
         dmat: distance matrix for leaf nodes
     """
     # Compute complete linkage distance between two clusters, explicitly
-    if linkage == "Complete":
+    if linkage == "complete":
         maxv = 0
         for i in cl1:
             for j in cl2:                
@@ -233,7 +222,7 @@ def cluster_dist(cl1, cl2,linkage,dmat):
                 if v > maxv:
                     maxv = v
         return maxv
-    elif linkage == "Single":
+    elif linkage == "single":
         minv = False
         for i in cl1:
             for j in cl2:                
@@ -282,9 +271,9 @@ def naive_verify(fastaFileName, Z, linkage, dist):
     dmat = np.zeros((len(seqs), len(seqs)))
     for si in range(len(seqs)):
         for sj in range(len(seqs)):
-            if dist == "Hamming":
+            if dist == "hamming":
                 dmat[si,sj] = hamming(seqs[si], seqs[sj])
-            elif dist == "Euclidean":
+            elif dist == "euclidean":
                 dmat[si,sj] = np.linalg.norm(seqs[si]-seqs[sj])
  
     k = len(seqs)
@@ -294,7 +283,7 @@ def naive_verify(fastaFileName, Z, linkage, dist):
         cluster_scores = []
         distcheck = cluster_dist(clusters[c1][0], clusters[c2][0], linkage,dmat) 
         try:
-            assert fabs(distcheck-score) < 0.0000001
+            assert fabs(distcheck-score) < 0.00001
         except:
             raise ValueError("wrong val")
         for cli, (clusteri,scorei) in clusters.items():
@@ -317,18 +306,8 @@ def naive_verify(fastaFileName, Z, linkage, dist):
         # assert lance williams
         clk = clusters[k][0]
 
-        TEST_EPS = 0.0000001
+        TEST_EPS = 0.0001
 
-        for clj, (clusterj,scorej) in clusters.items():
-            if clj not in [k,c1,c2]:
-                tmpdist = cluster_dist(clk,clusterj,linkage,dmat)
-                tmpdisti = cluster_dist(cl1, clusterj,linkage,dmat) 
-                tmpdistj = cluster_dist(cl2, clusterj,linkage,dmat)
-                n = n1 + n2
-                ai = n1/n
-                aj = n2/n
-                lwdist = ai*tmpdisti + aj*tmpdistj
-                assert fabs(lwdist-tmpdist) < TEST_EPS
         try:
             assert fabs(score-minscore) < TEST_EPS
         except:

@@ -95,37 +95,52 @@ class Constants:
         type_dist_domain = 'float'
     
         if dtype == None:
-            # If no data type is provided, estimate
+            # If no data type is provided, guess
             if linkage in ["UPGMA"]:
                 logger.error("dtype must be provided for UPGMA")
                 raise ValueError("dtype must be provided for UPGMA")
-            if distopt in ["euclidean"]
+            if distopt in ["euclidean"]:
                 logger.error("dtype must be provided for euclidean distances")
                 raise ValueError("dtype must be provided for euclidean distances")
-
-            # If hamming, need largest bits require to store
+            # JS: If hamming, need largest bits require to store
             # Max hamming distance, which is maxxlen
             distbits = cls.choose_data_bits(xlen)    
             type_dist_bits = distbits
             # Z linkage result needs to store largest of the types
             zbits = max(nb, type_dist_bits)
-            # float64 can repesent 
             cls.Z_TYPE = type_dist_domain+str(zbits)
         else:
-            if dtype == "float32":
-                cls.DATA_TYPE_DIST = np.float32
-                cls.Z_TYPE = np.float32
-                assert n < 2**23
-            elif dtype == "float64":
-                cls.DATA_TYPE_DIST = np.float64
-                cls.Z_TYPE = np.float64
-                assert n < 2**53
             # JS: note that float32 has 23 bit mantissa,
             # stores 2^23 integers precisely
             # double stores 2^53
-            # should always be acceptable 
-            
-        
+            # should always be acceptable
+            if "byte" in dtype:
+                cls.DATA_TYPE_DIST = dtype
+                cls.Z_TYPE = "uint"+str(nb)
+            else:
+                if dtype == "uint8":
+                    cls.DATA_TYPE_DIST = dtype
+                    cls.Z_TYPE = dtype
+                    if n < 2**23:
+                        cls.Z_TYPE = np.float64
+                elif dtype == "float64":
+                    cls.DATA_TYPE_DIST = dtype
+                    cls.Z_TYPE = dtype
+                    if n < 2**53:
+                        logger.error("1..n is too large to be precisely stored by float64 (2^53)")
+                        raise ValueError("1..n is too large to be precisely stored by float64 (2^53)")
+                elif dtype == "float16":
+                    # JS: no half ctype currently, need for RawArray
+                    logger.error("float16 is not currently supported.")
+                    raise ValueError("float16 is not currently supported.")
+
+                    cls.DATA_TYPE_DIST = np.float16
+                    # JS: float16 has 10 bit mantissa, just use float32 for Z
+                    if n < 2**23:
+                        cls.Z_TYPE = np.float32
+                    else:
+                        cls.Z_TYPE = np.float64
+             
         types = [ct.c_bool, ct.c_short, ct.c_ubyte, ct.c_ushort, ct.c_uint, ct.c_int8, ct.c_int, ct.c_long, ct.c_ulong, ct.c_float, ct.c_double]
         typed = {str(np.dtype(ctype)): ctype for ctype in types}
         cls.TYPE_TBL = typed
@@ -245,15 +260,15 @@ class Constants:
         """Get distance function given a string.
             
             Args:
-                distopt (str): string specifying distance function, either 'Hamming' or 'Euclidean'
+                distopt (str): string specifying distance function, either 'hamming' or 'euclidean'
         """
-        if distopt=='Hamming':
+        if distopt=='hamming':
             return cls.dist_hamming
-        elif distopt=='Euclidean':
+        elif distopt=='euclidean':
 #            assert cls.DATA_TYPE=='uint32', 'Data type must be uint32 when using this distance'
             return cls.dist_euclidean
         else:
-            raise Exception(f'Unknown distance option: {distopt}, should be Hamming or Euclidean.')
+            raise Exception(f'Unknown distance option: {distopt}, should be hamming or euclidean.')
 
     @staticmethod
     def dist_euclidean(x1,x2):

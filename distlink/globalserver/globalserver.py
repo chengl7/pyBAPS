@@ -137,7 +137,7 @@ def core_algo(origConn, veci, vecj, mati, matj, nodeFlag, blockCount, blockFlag,
     origConn.send(['update_child_block_list',])
     origConn.recv()
     if test:
-        lwtester = LwTester(Constants.linkage_opt[0], Constants.DATA_FILE_NAME, Constants.distopt)
+        lwtester = LwTester(Constants.linkage_opt, Constants.DATA_FILE_NAME, Constants.distopt)
     
     for iStep in range(Constants.N_NODE-1):
         origConn.send(['get_min',])
@@ -212,12 +212,12 @@ def lance_williams(veci,vecj,clusterSizeArr,ii,jj,minval):
         jj: index of jjth cluster (in matrix), between 0 and N_NODE
         minval: distance between ii and jj d(ii,jj)
     """
-    lo = Constants.linkage_opt[0]
-    if lo == "Complete":
+    lo = Constants.linkage_opt
+    if lo == "complete":
         return np.maximum(veci,vecj)
-    elif lo == "Single":
+    elif lo == "single":
         return np.minimum(veci,vecj)
-    elif lo == "Ward":
+    elif lo == "ward":
         dij = minval
         ni = clusterSizeArr[ii]
         nj = clusterSizeArr[jj]
@@ -482,7 +482,7 @@ def parse_input(args):
     outDirs = args[4::2]
     return (nMachine, globalHostName, inputFiles, outDirs)
     
-def run_server(nMachine, globalHostName, inputFiles, outDirs,linkage,distopt='Hamming',test=False):
+def run_server(nMachine, globalHostName, inputFiles, outDirs,linkage,distopt='Hamming',dtype=None,test=False):
     """Setup network and execute core linkage algorithm."""
     
     memMonitor = Process(target=disp_usage_forever,args=(logger.info,),name="Server Node")
@@ -517,12 +517,12 @@ def run_server(nMachine, globalHostName, inputFiles, outDirs,linkage,distopt='Ha
             logger.warn(f'input file "{infile}" does not exist, quit!')
             continue
         # step 1: preprocess input data, initialize Constants
-        [n,d] = preproc_fasta(infile, outDir,nMachine,linkage,distopt)  # Constants initialized here
+        [n,d] = preproc_fasta(infile, outDir,nMachine,linkage,distopt,dtype)  # Constants initialized here
 
         # JS: temporarily set the linkage here
 
         logger.info(f'start processing input file: {infile}, outDir={outDir}')
-        initargs = (n,d,infile,outDir,nMachine,linkage,distopt)
+        initargs = (n,d,infile,outDir,nMachine,linkage,distopt,dtype)
         Constants.init(*initargs)
         for i in range(nMachine):
             initConnArr[i].send(['Constants',*initargs])
