@@ -118,12 +118,12 @@ class Constants:
                 cls.DATA_TYPE_DIST = dtype
                 cls.Z_TYPE = "uint"+str(nb)
             else:
-                if dtype == "uint8":
+                if dtype.startswith("uint"):
                     cls.DATA_TYPE_DIST = dtype
                     cls.Z_TYPE = dtype
-                    if n < 2**23:
-                        cls.Z_TYPE = np.float64
-                elif dtype == "float64":
+#                    if n < 2**23:
+#                        cls.Z_TYPE = np.float64
+                if dtype == "float64":
                     cls.DATA_TYPE_DIST = dtype
                     cls.Z_TYPE = dtype
                     if n > 2**53:

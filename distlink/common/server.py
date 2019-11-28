@@ -5,7 +5,7 @@ from threading import Thread
 from functools import reduce
 from distlink.common.constants import Constants
 import logging
-import sleep,random
+import time,random
 loggingLevel = logging.INFO  # logging.DEBUG, logging.INFO, logging.WARNING
 loggingFormatter = logging.Formatter('%(asctime)s - %(processName)s - %(levelname)s - %(message)s')
 

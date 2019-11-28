@@ -368,6 +368,7 @@ def setup_2layer_network(nMachine, globalHostName, initHostArr, initConnArr):
         logFile = Constants.get_log_file(serverName)
         initConnArr[i].send(['LocalServer',parentConn,parentAddress, authKey, serverName, nChild, childBlockList, logFile]) 
     for i in range(nMachine):
+        print("receiving %dth machine" % i)
         initConnArr[i].recv()
         print('set up local server at ',initHostArr[i])
     
@@ -543,6 +544,8 @@ def run_server(nMachine, globalHostName, inputFiles, outDirs,linkage,distopt='Ha
         # step 3: choose network topology, start the servers
         veci, vecj, mati, matj, nodeFlag, blockCount, blockFlag = init_global_vars()
         origConn,globalServer = setup_network(nMachine, globalHostName, initHostArr, initConnArr)
+
+        logger.info('Network established.')
     
         # step 4: running the core linkage algorithm, save the result
         Z = core_algo(origConn, veci, vecj, mati, matj, nodeFlag, blockCount, blockFlag,test)
