@@ -5,6 +5,7 @@ from threading import Thread
 from functools import reduce
 from distlink.common.constants import Constants
 import logging
+import sleep,random
 loggingLevel = logging.INFO  # logging.DEBUG, logging.INFO, logging.WARNING
 loggingFormatter = logging.Formatter('%(asctime)s - %(processName)s - %(levelname)s - %(message)s')
 
@@ -43,6 +44,12 @@ class Server(Process):
             childBlockList: list of blocks for each child.
             logFile: file to write logs.
         """
+
+        # JS: temporary hack to prevent stalling connections
+        # When two try to connect simultaneously 
+        # Occurs at several points in the program
+        time.sleep(random.uniform(0,10))
+    
         super().__init__(name=serverName)
         
         # create logger, each process must have its own log file
@@ -97,6 +104,7 @@ class Server(Process):
         self.log('debug',f'Starting child connections for {self.serverName}')
         res = []
         for i in range(self.nChild):
+            self.log('debug',f'Listening for child node to connect.')
             conn = self.server.accept()
             res.append(conn)
             self.log('debug',f'Connection from {self.server.last_accepted[0]} established.')
