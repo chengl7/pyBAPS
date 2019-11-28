@@ -97,10 +97,10 @@ class Constants:
         if dtype == None:
             # If no data type is provided, guess
             if linkage in ["UPGMA"]:
-                logger.error("dtype must be provided for UPGMA")
+#                logger.error("dtype must be provided for UPGMA")
                 raise ValueError("dtype must be provided for UPGMA")
             if distopt in ["euclidean"]:
-                logger.error("dtype must be provided for euclidean distances")
+#                logger.error("dtype must be provided for euclidean distances")
                 raise ValueError("dtype must be provided for euclidean distances")
             # JS: If hamming, need largest bits require to store
             # Max hamming distance, which is maxxlen
@@ -126,12 +126,18 @@ class Constants:
                 elif dtype == "float64":
                     cls.DATA_TYPE_DIST = dtype
                     cls.Z_TYPE = dtype
-                    if n < 2**53:
-                        logger.error("1..n is too large to be precisely stored by float64 (2^53)")
+                    if n > 2**53:
+#                        logger.error("1..n is too large to be precisely stored by float64 (2^53)")
                         raise ValueError("1..n is too large to be precisely stored by float64 (2^53)")
+                elif dtype == "float32":
+                    cls.DATA_TYPE_DIST = dtype
+                    cls.Z_TYPE = dtype
+                    if n > 2**23:
+#                        logger.error("1..n is too large to be precisely stored by float32 (2^23)")
+                        raise ValueError("1..n is too large to be precisely stored by float32 (2^23)")
                 elif dtype == "float16":
                     # JS: no half ctype currently, need for RawArray
-                    logger.error("float16 is not currently supported.")
+#                    logger.error("float16 is not currently supported.")
                     raise ValueError("float16 is not currently supported.")
 
                     cls.DATA_TYPE_DIST = np.float16
@@ -275,6 +281,12 @@ class Constants:
         # JS: Return type is the same as dtypes of x1,x2
         # JS: Specify floating point 
         return np.linalg.norm(x1-x2)
+
+    @staticmethod
+    def jaccard(x1,x2):
+        # requires x1, x2 to be kmerized sets
+        intersection = x1 & x2
+        return len(intersection) / (len(x1)+len(x2)-len(intersection))
         
 #    @staticmethod    
 #    def dist_eclidean32(x1,x2):
