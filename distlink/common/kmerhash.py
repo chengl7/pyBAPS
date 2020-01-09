@@ -10,9 +10,12 @@ class KmerSet():
         else:
             print("kmer should be shorter than 32 bases")
             raise ValueError
-        self.base_map = {'A': 0, 'C': 1, 'G': 2, 'T': 3}
-        self.base = {bk:self.dtype(self.base_map[bk]) for bk in self.base_map}
+        self.set = set()
 
+    def __add__(self, other):
+        merged = KmerSet(self.k)
+        merged.set = self.set.union(other.set)
+        return merged
 
     @classmethod
     def fromarray(cls, k, array):
@@ -23,10 +26,10 @@ class KmerSet():
         return instance
 
     @classmethod
-    def fromstring(cls, k, string):
-        """ Builds a KmerSet from a string """
+    def fromit(cls, k, string):
+        """ Builds a KmerSet by decomposing an iterable sequence e.g. string"""
         instance = cls(k)
-        instance.build_set(string)
+        instance.set = set([instance.kmer2hash(string[i:i+k]) for i in range(len(string)-k+1)])
         return instance
 
     @classmethod
@@ -43,13 +46,11 @@ class KmerSet():
             kmerset2: a KmerSet object
         """
         num = len(self.set.intersection(kmerset2.set))
-        den = len(self.set.union(kmerset2.set))
+        den = len(self.set)+len(kmerset2.set)-num
         J = num/den
         assert 0 <= J <= 1, "Jaccard index calculated incorrectly,0 \leq %f \leq 1."
         return J
 
-    def build_set(self, string):
-        self.set = set([self.kmer2hash(string[i:i+self.k]) for i in range(len(string)-self.k+1)])
     
     def kmer2hash(self,kmer):
         """ Kmer hash function (string to integer)
@@ -59,17 +60,17 @@ class KmerSet():
         """
         k = len(kmer)
         assert k == self.k, (k, kmer, self.k)
-        kh = self.base[kmer[0]]
+        # JS: DNA currently stored as integers internally
+        kh = self.dtype(kmer[0])
         for tb in kmer[1:]:
             kh = kh<<self.dtype(2)
-            kh += self.base[tb]
+            kh += self.dtype(tb)
         return kh
 
 def test():
     from itertools import product
     for k in range(1,5):
-        combs = [kmer for kmer in product("ATCG", repeat=k)]
-        combs = ["".join(kmer) for kmer in product("ATCG", repeat=k)]
+        combs = [kmer for kmer in product([0,1,2,3], repeat=k)]
         ks1 = KmerSet.fromkmers(combs)
         assert len(combs) == len(set(combs)) == len(ks1.set)
     print("Low k hashing test passed")
@@ -77,13 +78,15 @@ def test():
 def test_jaccard():
     import random
     for k in range(1,32):
-        s1 = "".join([random.choice("ATCG") for i in range(1000)])
-        s2 = "".join([random.choice("ATCG") for i in range(1000)])
-        ks1 = KmerSet.fromstring(k,s1)
-        ks2 = KmerSet.fromstring(k,s2)            
+        s1 = [random.choice([0,1,2,3]) for i in range(1000)]
+        s2 = [random.choice([0,1,2,3]) for i in range(1000)]
+        ks1 = KmerSet.fromit(k,s1)
+        ks2 = KmerSet.fromit(k,s2)            
         J1 = ks1.jaccard(ks2)
-        testkset1 = set([s1[i:i+k] for i in range(len(s1)-k+1)])
-        testkset2 = set([s2[i:i+k] for i in range(len(s2)-k+1)])
+        strs1 = "".join([str(c) for c in s1])
+        strs2 = "".join([str(c) for c in s2])
+        testkset1 = set([strs1[i:i+k] for i in range(len(strs1)-k+1)])
+        testkset2 = set([strs2[i:i+k] for i in range(len(strs2)-k+1)])
         intersection = testkset1.intersection(testkset2)
         union = testkset1.union(testkset2)
         J2 = len(intersection)/len(union)

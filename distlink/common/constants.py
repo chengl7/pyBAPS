@@ -50,7 +50,7 @@ class Constants:
     linkage_opt = None
     
     @classmethod
-    def init(cls, n, xlen, datafile, outdir, nMachine, linkage, distopt, dtype=None, nBlock=None):
+    def init(cls, n, xlen, datafile, outdir, nMachine, linkage, distopt, dtype=None, kmer_size=None, nBlock=None):
         """Initialize with basic constants, compute derived constants.
 
         Args:
@@ -167,6 +167,8 @@ class Constants:
         cls.DATA_FILE_NAME = datafile
         
         cls.DIST_FUNC = cls.get_dist_func(distopt)
+
+        self.kmer_size = kmer_size
     
     @staticmethod
     def get_data_type(n):
@@ -284,9 +286,11 @@ class Constants:
 
     @staticmethod
     def jaccard(x1,x2):
-        # requires x1, x2 to be kmerized sets
-        intersection = x1 & x2
-        return len(intersection) / (len(x1)+len(x2)-len(intersection))
+        # JS: currently slow; if we pass in sets then we save some time, rather than
+        # JS: repeatedly building them
+        kmerset1 = KmerSet.fromit(self.kmer_size, x1) + KmerSet.fromit(self.kmer_size, rev_comp(x1))
+        kmerset2 = KmerSet.fromit(self.kmer_size, x2) + KmerSet.fromit(self.kmer_size, rev_comp(x2))
+        J = kmerset1.jaccard(kmerset2)
         
 #    @staticmethod    
 #    def dist_eclidean32(x1,x2):
