@@ -285,21 +285,30 @@ class Constants:
         return np.linalg.norm(x1-x2)
 
     @staticmethod
+    def int_rev_comp(arr):
+        # JS: should use a common map (duplicate in seq2int)
+        # TODO: make common map
+        base = {'A': 1, 'C': 2, 'G': 3, 'T': 4, 'a': 1, 'c': 2, 'g': 3, 't': 4}
+        arr2 = []
+        for i in arr:
+            if i == 1:
+                arr2.append(4)
+            elif i == 2:
+                arr2.append(3)
+            elif i == 3:
+                arr2.append(2)
+            else:
+                arr2.append(1)
+        return np.array(arr2)
+
+    @staticmethod
     def jaccard(x1,x2):
+        # TODO: save time by saving the KmerSet and reusing them
         # JS: currently slow; if we pass in sets then we save some time, rather than
         # JS: repeatedly building them
-        kmerset1 = KmerSet.fromit(self.kmer_size, x1) + KmerSet.fromit(self.kmer_size, rev_comp(x1))
-        kmerset2 = KmerSet.fromit(self.kmer_size, x2) + KmerSet.fromit(self.kmer_size, rev_comp(x2))
+        kmerset1 = KmerSet.fromit(self.kmer_size, x1) + KmerSet.fromit(self.kmer_size, int_rev_comp(x1))
+        kmerset2 = KmerSet.fromit(self.kmer_size, x2) + KmerSet.fromit(self.kmer_size, int_rev_comp(x2))
         J = kmerset1.jaccard(kmerset2)
-        
-#    @staticmethod    
-#    def dist_eclidean32(x1,x2):
-#        return np.float32(np.linalg.norm(x1-x2))
-#        return np.uint32(np.sqrt(np.sqrt(np.sum((x1-x2)**2)))*1000000)
-
-#    @staticmethod    
-#    def dist_eclidean16(x1,x2):
-#        return np.float16(np.linalg.norm(x1-x2))
     
     @staticmethod
     def dist_hamming(x1,x2):

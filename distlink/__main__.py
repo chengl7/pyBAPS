@@ -9,19 +9,25 @@ parser.add_argument("-globalHostName", type=str)
 parser.add_argument("-inputFiles", nargs='+', type=str, default=None)
 parser.add_argument("-outDirs",nargs='+', type=str, default=None)
 parser.add_argument("-linkage", choices=["UPGMA", "complete", "single"],type=str, default=None)
-parser.add_argument("-dist", choices=["hamming","euclidean"], type=str, default=None)
+parser.add_argument("-dist", choices=["hamming","euclidean", "jaccard"], type=str, default=None)
 parser.add_argument("-dtype", choices=["uint8", "uint16", "uint32", "uint64", "float32", "float64"], type=str, default=None)
+parser.add_argument("-k", default=None, type=int)
 
 args = parser.parse_args()
 
-if args.dist == "euclidean" or args.dist in ["UPGMA"]:
+if args.dist in ["euclidean","jaccard"] or args.linkage in ["UPGMA"]:
     if args.dtype not in ["float32", "float64"]:
         parser.error("The chosen distance/linkage requires a dtype to be specified (float32,float64)")
+
+if args.dist == "jaccard":
+    if args.k == None:
+        parser.error("Jaccard index requires specification of k (-k)")
 
 if args.mode == "server":
     if (args.inputFiles is None or args.outDirs is None):
         parser.error("Server requires both -inputFiles and -outDirs to be specified")
-    gs.run_server(args.nMachine, args.globalHostName, args.inputFiles, args.outDirs, args.linkage, args.dist,args.dtype)
+#    gs.run_server(args.nMachine, args.globalHostName, args.inputFiles, args.outDirs, args.linkage, args.dist,args.dtype)
+    gs.run_server(args)
 
 elif args.mode == "worker":
     wo.run_worker(args.globalHostName)
@@ -49,7 +55,8 @@ elif args.mode == "test":
         gd.write_random_fasta(randomFastaFname1, 20, 50001) 
         gd.write_random_fasta(randomFastaFname2, 201, 11) 
         print("Running server...")
-        gs.run_server(args.nMachine, args.globalHostName, [randomFastaFname1, randomFastaFname2], args.outDirs,args.linkage,args.dist,args.dtype)
+#        gs.run_server(args.nMachine, args.globalHostName, [randomFastaFname1, randomFastaFname2], args.outDirs,args.linkage,args.dist,args.dtype)
+        gs.run_server(args)
         print("Verifying solution 1...")
         Z = np.load("%s/Z.npy" % args.outDirs[0])
         Zscipy = cv.validation_cluster(randomFastaFname1, args.linkage,args.dtype)
@@ -64,7 +71,8 @@ elif args.mode == "test":
             print("For testing, only one input file can be specified")
             sys.exit(1)
         print("Running server...")
-        gs.run_server(args.nMachine, args.globalHostName, args.inputFiles, args.outDirs,args.linkage,args.dist, args.dtype,test=True)
+#        gs.run_server(args.nMachine, args.globalHostName, args.inputFiles, args.outDirs,args.linkage,args.dist, args.dtype,test=True)
+        gs.run_server(args)
         print("Verifying solution...")
         Z = np.load("%s/Z.npy" % args.outDirs[0])
         cv.naive_verify(args.inputFiles[0], Z, args.linkage,args.dist)
