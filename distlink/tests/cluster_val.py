@@ -8,7 +8,7 @@ from math import fabs
 
 class LwTester():
     """Object for testing Lance-Williams dissimilarity update on every step."""
-    def __init__(self, linkage, fastaFileName,dist):
+    def __init__(self, linkage, fastaFileName,dist,k=None):
         """
         Args:
             linkage: linkage string.
@@ -17,6 +17,7 @@ class LwTester():
         self.linkage = linkage
         seqs = np.array([s for h,s in fasta_iter(fastaFileName)])
         self.dmat = np.zeros((len(seqs), len(seqs)))
+        tmprevmap = {"1":"4", "2":"3", "3":"2", "4":"1"}
         for si in range(len(seqs)):
             for sj in range(len(seqs)):
                 if dist == "hamming":
@@ -26,6 +27,20 @@ class LwTester():
                     diff1 = seqs[si]-seqs[sj]
                     diff2 = seqs[sj]-seqs[si]
                     assert self.dmat[si,sj] == np.linalg.norm(seqs[sj]-seqs[si]), "%f,%f,%f"% (self.dmat[si,sj],np.linalg.norm(seqs[sj]-seqs[si]), np.linalg.norm(seqs[si]-seqs[sj]))
+                elif dist == "jaccard":
+                    assert k != None
+                    s1 = "".join([str(c) for c in seqs[si]])
+                    s2 = "".join([str(c) for c  in seqs[sj]])
+                    s1rev = "".join([tmprevmap[c] for c in s1])[::-1]
+                    s2rev = "".join([tmprevmap[c] for c in s2])[::-1]
+                    s1kmers = [s1[zi:zi+k] for zi in range(len(s1)-k+1)]
+                    s2kmers = [s2[zi:zi+k] for zi in range(len(s2)-k+1)]
+                    s1revkmers = [s1rev[zi:zi+k] for zi in range(len(s1rev)-k+1)]
+                    s2revkmers = [s2rev[zi:zi+k] for zi in range(len(s2rev)-k+1)]
+                    set1 = set(s1kmers).union(s1revkmers)
+                    set2 = set(s2kmers).union(s2revkmers)
+                    self.dmat[si,sj] = len(set1.intersection(set2)) / len(set1.union(set2))
+
         self.N_NODE = len(self.dmat)
 
     def testri(self, Zinc, ii,jj,rowi,rowj):

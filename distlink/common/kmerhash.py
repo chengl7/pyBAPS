@@ -1,5 +1,12 @@
 import numpy as np
 
+def int_rev_comp(arr):
+    # JS: should use a common map (duplicate in seq2int)
+    # TODO: make common map
+    d = {1:4, 2:3, 3:2, 4:1}
+    arr2 = [d[i] for i in arr][::-1]
+    return np.array(arr2)
+
 class KmerSet():
     def __init__(self, k):
         self.k = k
@@ -17,27 +24,37 @@ class KmerSet():
         merged.set = self.set.union(other.set)
         return merged
 
-    @classmethod
-    def fromarray(cls, k, array):
-        """ Builds KmerSet from an array of integers (previously saved) """
-        # JS: in our implementation k is redundant here. However I supply it for constistency
-        instance = cls(k)
-        instance.set = set(array)
-        return instance
+#    @classmethod
+#    def fromarray(cls, k, array):
+#        """ Builds KmerSet from an array of integers (previously saved) """
+#        # JS: in our implementation k is redundant here. However I supply it for constistency
+#        instance = cls(k)
+#        instance.set = set(array)
+#        instance.add_reverse_complement()
+#        return instance
 
     @classmethod
-    def fromit(cls, k, string):
-        """ Builds a KmerSet by decomposing an iterable sequence e.g. string"""
+    def fromit(cls, k, array):
+        """ Builds a KmerSet by decomposing an iterable sequence e.g. array. 
+        
+            Currently includes the reverse complement.
+
+            Args:
+                k : integer kmer size
+                string: string to be decomposed into kmers
+        """
         instance = cls(k)
-        instance.set = set([instance.kmer2hash(string[i:i+k]) for i in range(len(string)-k+1)])
+        instance.set = set([instance.kmer2hash(array[i:i+k]) for i in range(len(array)-k+1)])
+        revset = set([instance.kmer2hash(int_rev_comp(array[i:i+k])) for i in range(len(array)-k+1)])
+        instance.set = instance.set.union(revset)
         return instance
 
-    @classmethod
-    def fromkmers(cls,kmers):
-        """ Builds a KmerSet from a list of kmers """
-        instance = cls(len(kmers[0]))
-        instance.set = set([instance.kmer2hash(kmer) for kmer in kmers])
-        return instance
+#    @classmethod
+#    def fromkmers(cls,kmers):
+#        """ Builds a KmerSet from a list of kmers """
+#        instance = cls(len(kmers[0]))
+#        instance.set = set([instance.kmer2hash(kmer) for kmer in kmers])
+#        return instance
 
     def jaccard(self,kmerset2):
         """ Calculates the jaccard index between this kmerset and another.

@@ -137,7 +137,7 @@ def core_algo(origConn, veci, vecj, mati, matj, nodeFlag, blockCount, blockFlag,
     origConn.send(['update_child_block_list',])
     origConn.recv()
     if test:
-        lwtester = LwTester(Constants.linkage_opt, Constants.DATA_FILE_NAME, Constants.distopt)
+        lwtester = LwTester(Constants.linkage_opt, Constants.DATA_FILE_NAME, Constants.distopt, Constants.kmer_size)
     
     for iStep in range(Constants.N_NODE-1):
         origConn.send(['get_min',])
@@ -324,6 +324,7 @@ def setup_network(nMachine, globalHostName, initHostArr, initConnArr):
         initHostArr: addresses of connections to initialization global server.
         initConnArr: connections to initialization global server.
     """
+    logger.debug('setting up network')
     if nMachine<30:
         origConn,globalServer = setup_2layer_network(nMachine, globalHostName, initHostArr, initConnArr)
     else:
@@ -343,6 +344,7 @@ def setup_2layer_network(nMachine, globalHostName, initHostArr, initConnArr):
         initHostArr: addresses of connections to initialization global server.
         initConnArr: connections to initialization global server.    
     """
+    logger.debug('setting up 2 layer network')
     initPort,gPort,rPort,lPort,authkey = Constants.get_conn_vars()
     locSerBlockList = get_local_tasks(nMachine)
     
@@ -488,10 +490,10 @@ def run_server(args):
     """Setup network and execute core linkage algorithm."""
     nMachine = args.nMachine
     globalHostName = args.globalHostName
-    inputFiles = args.inputfiles
+    inputFiles = args.inputFiles
     outDirs = args.outDirs
     linkage = args.linkage
-    distopt = args.distopt
+    distopt = args.dist
     kmer_size = args.k
     dtype = args.dtype
     if args.mode == "test":
@@ -547,6 +549,7 @@ def run_server(args):
         batchList = [(bi,bj) for bi in range(Constants.N_BLOCK) for bj in range(bi,Constants.N_BLOCK)]
         batchListArr = split_list(batchList,nMachine)
         for i in range(nMachine):
+            logger.info('Sending cal_dist.')
             initConnArr[i].send(['cal_dist',outDir,batchListArr[i]])
         for i in range(nMachine):
             initConnArr[i].recv()

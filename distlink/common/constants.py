@@ -1,6 +1,7 @@
 import ctypes as ct
 import numpy as np
 import os
+from distlink.common.kmerhash import KmerSet
 
 class Constants:
     """Constants class to store global variables used by most functions.
@@ -168,7 +169,7 @@ class Constants:
         
         cls.DIST_FUNC = cls.get_dist_func(distopt)
 
-        self.kmer_size = kmer_size
+        cls.kmer_size = kmer_size
     
     @staticmethod
     def get_data_type(n):
@@ -275,8 +276,10 @@ class Constants:
         elif distopt=='euclidean':
 #            assert cls.DATA_TYPE=='uint32', 'Data type must be uint32 when using this distance'
             return cls.dist_euclidean
+        elif distopt=='jaccard':
+            return cls.dist_jaccard
         else:
-            raise Exception(f'Unknown distance option: {distopt}, should be hamming or euclidean.')
+            raise Exception(f'Unknown distance option: {distopt}, should be hamming, euclidean, or jaccard.')
 
     @staticmethod
     def dist_euclidean(x1,x2):
@@ -285,30 +288,14 @@ class Constants:
         return np.linalg.norm(x1-x2)
 
     @staticmethod
-    def int_rev_comp(arr):
-        # JS: should use a common map (duplicate in seq2int)
-        # TODO: make common map
-        base = {'A': 1, 'C': 2, 'G': 3, 'T': 4, 'a': 1, 'c': 2, 'g': 3, 't': 4}
-        arr2 = []
-        for i in arr:
-            if i == 1:
-                arr2.append(4)
-            elif i == 2:
-                arr2.append(3)
-            elif i == 3:
-                arr2.append(2)
-            else:
-                arr2.append(1)
-        return np.array(arr2)
-
-    @staticmethod
-    def jaccard(x1,x2):
+    def dist_jaccard(x1,x2):
         # TODO: save time by saving the KmerSet and reusing them
         # JS: currently slow; if we pass in sets then we save some time, rather than
         # JS: repeatedly building them
-        kmerset1 = KmerSet.fromit(self.kmer_size, x1) + KmerSet.fromit(self.kmer_size, int_rev_comp(x1))
-        kmerset2 = KmerSet.fromit(self.kmer_size, x2) + KmerSet.fromit(self.kmer_size, int_rev_comp(x2))
+        kmerset1 = KmerSet.fromit(Constants.kmer_size, x1)
+        kmerset2 = KmerSet.fromit(Constants.kmer_size, x2)
         J = kmerset1.jaccard(kmerset2)
+        return J
     
     @staticmethod
     def dist_hamming(x1,x2):
