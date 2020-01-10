@@ -84,26 +84,27 @@ class KmerSet():
             kh += self.dtype(tb)
         return kh
 
-def test():
-    from itertools import product
-    for k in range(1,5):
-        combs = [kmer for kmer in product([0,1,2,3], repeat=k)]
-        ks1 = KmerSet.fromkmers(combs)
-        assert len(combs) == len(set(combs)) == len(ks1.set)
-    print("Low k hashing test passed")
-
 def test_jaccard():
+    # Test jaccard with and without hash function
     import random
     for k in range(1,32):
-        s1 = [random.choice([0,1,2,3]) for i in range(1000)]
-        s2 = [random.choice([0,1,2,3]) for i in range(1000)]
+        s1 = [random.choice([1,2,3,4]) for i in range(1000)]
+        s2 = [random.choice([1,2,3,4]) for i in range(1000)]
         ks1 = KmerSet.fromit(k,s1)
         ks2 = KmerSet.fromit(k,s2)            
         J1 = ks1.jaccard(ks2)
         strs1 = "".join([str(c) for c in s1])
         strs2 = "".join([str(c) for c in s2])
         testkset1 = set([strs1[i:i+k] for i in range(len(strs1)-k+1)])
+        for kmer in [e for e in testkset1]:
+            kmer2 = [int(i) for i in kmer]
+            testkset1.add("".join([str(c) for c in int_rev_comp(kmer2)]))
+
         testkset2 = set([strs2[i:i+k] for i in range(len(strs2)-k+1)])
+        for kmer in [e for e in testkset2]:
+            kmer2 = [int(i) for i in kmer]
+            testkset2.add("".join([str(c) for c in int_rev_comp(kmer2)]))
+
         intersection = testkset1.intersection(testkset2)
         union = testkset1.union(testkset2)
         J2 = len(intersection)/len(union)
@@ -111,5 +112,4 @@ def test_jaccard():
     print("Basic Jaccard test passed")
 
 if __name__ == "__main__":
-    test()
     test_jaccard()
